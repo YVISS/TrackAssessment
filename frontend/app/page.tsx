@@ -1,21 +1,10 @@
-import LoginPage from "./ui/login/page";
-import Link from "next/link";
-
+import Card from './ui/card/page';
+import './globals.css';
 export default function page() {
     return (
-        <main>
-            <h1>Landing Page</h1>
-            <p>
-                <Link href="./ui/login">
-                    Log In
-                </Link>
-            </p>
-            <p>
-                <Link href="./ui/signin">
-                    Sign In
-                </Link>
-            </p>
-
-        </main>
+        <section className="w-full justify-center align-center flex flex-col items-center gap-4">
+            <h1 className="">Landing Page</h1>
+            <Card />
+        </section>
     );
 }
