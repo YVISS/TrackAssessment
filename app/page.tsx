@@ -1,5 +1,0 @@
-
-
-export default function page() {
-    return <h1>Hello, ombac</h1>;
-}
