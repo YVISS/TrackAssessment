@@ -1,5 +1,5 @@
 
-import { auth, signIn, signOut } from "@/auth"
+import { auth, signIn } from "../../../auth"
 
 export default async function SignIn() {
   const session = await auth();
