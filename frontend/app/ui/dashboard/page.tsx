@@ -17,7 +17,7 @@ export default async function page() {
             <p>Welcome, {name}!</p>
             <form
                   action={async () => {
-                    "use server"
+                    "use client"
                     await signOut()
                   }}
                 >
