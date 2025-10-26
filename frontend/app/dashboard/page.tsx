@@ -8,7 +8,7 @@ export default async function SignIn() {
   return user ? (
     <>
       <div className="flex w-full h-screen justify-start items-center">
-        <div className="flex w-80 h-[80%] align-center justify-start flex-col gap-4 items-center p-7 bg-white rounded-lg shadow-md">
+        <div className="flex w-80 h-[90%] align-center justify-start flex-col gap-4 items-center p-7 bg-white rounded-lg shadow-md">
           <img src={user?.image ?? undefined} alt="Profile Image" className="w-[7vw] rounded-full" />
           <div>Welcome, {user.name}!</div>
           <form
