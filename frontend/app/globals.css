@@ -1,15 +1,22 @@
 @import "tailwindcss";
 
 @layer base {
-    .formbtns {
+    .formbtns-1 {
         width: auto;
-        border-radius: 50px;
-        background-color: rgb(189, 189, 255);
+        border-radius: 0;
+        margin: 0 auto;
+        padding: 5px 20px;
+        font-weight: 500;
+        transition: filter 0.3s ease-in-out;
+    }
+    .formbtns-2 {
+        width: auto;
+        border-radius: 0;
         margin: 0 auto;
         padding: 5px 20px;
         font-weight: 500;
     }
-    .formbtns:hover {
-        background-color: transparent;
+    .formbtns-1:hover {
+        filter:invert(0.2);
     }
 }

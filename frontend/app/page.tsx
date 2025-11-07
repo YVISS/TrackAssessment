@@ -1,17 +1,30 @@
-import Link from 'next/link';
-import SignIn from './component/signin/page';
 import './globals.css';
+import Link from 'next/link';
+import Image from 'next/image';
+import { notoSans } from './fonts/fonts';
 export default function page() {
     return (
-        <section className="w-full justify-center align-center flex flex-col items-center gap-[10vw] bg-linear-to-b from-sky-100 from-20% via-sky-200 to-sky-700 h-screen">
-            <h1 className="font-bold text-[3vw]">Track Assessment</h1>
-            <div className=''>
-                <div className=" w-auto relative flex justify-around align-center h-[250px] rounded-lg shadow-lg flex-col p-6 bg-white ">
-                    <p className=''>Please Login using your Google Account</p>
-                    <SignIn></SignIn>
+        <section className="px-24 py-4 w-full justify-start flex flex-col items-start gap-[10vw] h-screen">
+            <header className='flex items-center gap-4 justify-between w-full'>
+                <div className="nav_logo">
+                    <Image src="/logo.svg" width={52} height={52} loading='lazy' alt='Logo' />
                 </div>
-            </div>
+                <nav>
+                    <ul>
+                        <li className={`${notoSans.className} flex items-center gap-6 text-md justify-center w-full`}>
+                            <Link href={"/"}>Home</Link>
+                            <Link href={"/"}>About</Link>
+                            <Link href={"/"}>Test</Link>
+                            <Link href={"/"}>Resources</Link>
+                        </li>
+                    </ul>
+                </nav>
+                <div className="nav_cta gap-4 flex">
+                    <button className='formbtns-2 border bg-sky-200 hover:border border-sky-200 hover:bg-transparent duration-300 ease-in-out'>Login</button>
+                    <button className='formbtns-1 bg-sky-500'>Register</button>
+                </div>
 
+            </header>
         </section>
     );
 }
