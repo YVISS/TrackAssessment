@@ -4,8 +4,8 @@ import Image from 'next/image';
 import { notoSans } from './fonts/fonts';
 export default function page() {
     return (
-        <section className="px-24 py-4 w-full justify-start flex flex-col items-start gap-12 h-auto">
-            <header className='flex items-center justify-between w-full'>
+        <section className="w-full justify-start flex flex-col items-start h-auto">
+            <header className=' py-4 px-24 flex items-center justify-between w-full mb-12 border-b-1 border-sky-200'>
                 <div className="nav_logo">
                     <Image src="/logo.svg" width={52} height={52} loading='lazy' alt='Logo' />
                 </div>
@@ -26,7 +26,7 @@ export default function page() {
                 </nav>
 
             </header>
-            <section className='hero flex h-screen items-center justify-center w-full border'>
+            <section className='hero flex h-screen items-center justify-center w-full'>
                 <div className="hero__card__content text-center m-60 flex items-center justify-center flex-col gap-4">
                     <p className='items-center flex justify-center align-center text-center font-bold text-white txt-md'>Navigate your senior high school journey</p>
                     <p className='text-white'>Discover your true academic potential with our comprehensive track assessment. We help you understand your strengths and find the perfect educational path.</p>
@@ -36,7 +36,7 @@ export default function page() {
                     </div>
                 </div>
             </section>
-            <section className='features w-full min-h-screen gap-20 flex flex-col'>
+            <section className='features w-full min-h-screen gap-20 flex flex-col bg-sky-200 p-24'>
                 <div className="features__text text-center gap-4 flex items-center flex-col">
                     <p className='txt-normal'>Features</p>
                     <p className='txt-lg font-bold'>How it works</p>

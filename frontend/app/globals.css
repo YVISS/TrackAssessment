@@ -9,10 +9,6 @@
         padding: 5px 20px;
     }
 
-    section {
-        margin-bottom: 100px;
-    }
-
     .primary {
         background-color: #b8e6fe;
         border: 1px solid #b8e6fe;
@@ -43,6 +39,7 @@
         background: linear-gradient(248deg, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.2)), url("/books-1.png") center/cover no-repeat;
         min-height: auto;
         background-attachment: fixed;
+        width: 100%;
     }
 
     .cards {
@@ -72,14 +69,13 @@
 
     }
     a{
-        color: white;
         text-decoration: none;
         transition: text-decoration 0.3s ease-in-out;
     }
     a:hover{
         text-decoration: underline;
     }
-    
+
     .txt-xl {
         font-size: 96px;
         line-height: 3ch;
