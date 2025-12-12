@@ -4,9 +4,9 @@ export default function Page() {
     <section className="bg-white w-full h-auto p-2 rounded-lg ">
       <div className="flex items-center justify-start px-4">
         <Link href={"/dashboard"}>
-          <img src="/logo.svg" alt="" width={70} />
+          <img src="/logo.png" alt="" width={150}   /> 
         </Link>
-        <p className="text-xl">Track Assessment</p>
+        <p className="text-xl"></p>
       </div>
     </section>
   );

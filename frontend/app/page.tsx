@@ -7,7 +7,7 @@ export default function page() {
         <section className="w-full justify-start flex flex-col items-start h-auto">
             <header className=' py-4 px-24 flex items-center justify-between w-full mb-12 border-b-1 border-sky-200'>
                 <div className="nav_logo">
-                    <Image src="/logo.svg" width={52} height={52} loading='lazy' alt='Logo' />
+                    <Image src="/logo.png" width={100} height={100} loading='lazy' alt='Logo' />
                 </div>
                 <nav className='flex items-center gap-10'>
                     <ul>
@@ -20,7 +20,10 @@ export default function page() {
                     </ul>
 
                     <div className="nav_cta gap-4 flex">
-                        <button className='primary'>Login</button>
+                        
+                            <Link href={"/signin"}>
+                            <button className='primary'>Log In</button>
+                            </Link>
                         <button className='secondary hover:text-white hover:bg-sky-700 transition duration-300 ease-in-out'>Register</button>
                     </div>
                 </nav>
