@@ -2,6 +2,104 @@
 
 @layer base {
 
+    /* font sizings */
+    /* Base Settings */
+    html {
+        font-size: 16px;
+        line-height: 1.5;
+        font-family: "Inter", "Roboto", "Segoe UI", sans-serif;
+        color: #222;
+    }
+
+    /* Headings */
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+        font-weight: 700;
+        line-height: 1.2;
+        margin: 0 0 0.5em;
+    }
+
+    h1 {
+        font-size: 3rem;
+        /* 48px */
+    }
+
+    h2 {
+        font-size: 2.375rem;
+        /* 38px */
+    }
+
+    h3 {
+        font-size: 1.875rem;
+        /* 30px */
+    }
+
+    h4 {
+        font-size: 1.5rem;
+        /* 24px */
+    }
+
+    h5 {
+        font-size: 1.25rem;
+        /* 20px */
+    }
+
+    h6 {
+        font-size: 1rem;
+        /* 16px */
+    }
+
+    /* Body Text */
+    p {
+        font-size: 1rem;
+        /* 16px */
+        margin: 0 0 1em;
+    }
+
+    .small-text {
+        font-size: 0.875rem;
+        /* 14px */
+    }
+
+    .micro-text {
+        font-size: 0.75rem;
+        /* 12px */
+    }
+
+    /* Responsive Adjustments (Mobile) */
+    @media (max-width: 600px) {
+        h1 {
+            font-size: 2.25rem;
+        }
+
+        /* 36px */
+        h2 {
+            font-size: 1.875rem;
+        }
+
+        /* 30px */
+        h3 {
+            font-size: 1.5rem;
+        }
+
+        /* 24px */
+        h4 {
+            font-size: 1.25rem;
+        }
+
+        /* 20px */
+    }
+
+
+
+    body {
+        background-color: oklch(95.1% 0.026 236.824);
+    }
+
     button {
         width: auto;
         border-radius: 0;
@@ -50,7 +148,8 @@
         padding: 40px;
         position: relative;
     }
-    .card_text{
+
+    .card_text {
         position: absolute;
     }
 
@@ -68,11 +167,13 @@
         background: linear-gradient(248deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.4)), url("/f-3.png") center/cover no-repeat;
 
     }
-    a{
+
+    a {
         text-decoration: none;
         transition: text-decoration 0.3s ease-in-out;
     }
-    a:hover{
+
+    a:hover {
         text-decoration: none;
     }
 
@@ -100,7 +201,8 @@
         font-size: 20px;
         line-height: 1.5ch;
     }
-    .txt-xs{
+
+    .txt-xs {
         font-size: 18px;
         line-height: 2ch;
     }

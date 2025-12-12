@@ -1,0 +1,9 @@
+
+
+table .table-headings th{
+    padding: 12px;
+}
+
+table .table-data td{
+    padding: 24px 12px;
+}

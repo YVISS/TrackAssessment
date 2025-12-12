@@ -10,7 +10,7 @@ export default function mainLayout({
       <body className={`${poppins.className} antialiased`} suppressHydrationWarning>
         {/* Layout UI */}
         {/* Place children where you want to render a page or nested layout */}
-        <main className="b">{children}</main>
+        <main className="">{children}</main>
       </body>
     </html>
   );

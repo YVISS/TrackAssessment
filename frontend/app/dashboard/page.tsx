@@ -1,95 +1,55 @@
-import { auth, signOut, signIn } from "@/auth";
-import { redirect } from "next/navigation";
-import Link from "next/link";
-import Navbar from "../component/navbar/page";
+import { createClient } from '@/utils/supabase/server'
+import { cookies } from 'next/headers'
+import '../styles/dashboard.css'
+export default async function Page() {
+  const cookieStore = await cookies()
+  const supabase = await createClient(cookieStore)
 
-export default async function SignIn() {
-  const session = await auth();
-  const user = session?.user;
+  const { data: users, error } = await supabase.from('users').select('*')
 
-  return user ? (
-    <>
-      <section className="p-4">
-        <div className="flex w-full h-screen justify-start items-center">
-          <div className="flex w-80 h-[90%] align-center justify-start flex-col gap-4 items-center bg-white rounded-lg shadow-md">
-            <div className="p-7 flex flex-col justify-center items-center gap-2">
-              <img
-                src={user?.image ?? undefined}
-                alt="Profile Image"
-                className="w-[7vw] rounded-full"
-              />
-              <div className="">
-                Welcome, <span className="font-bold">{user.name}</span>
-              </div>
-              <form
-                action={async () => {
-                  "use server";
-                  await signOut();
-                }}
-              >
-                <button
-                  type="submit"
-                  className="formbtns flex align-middle justify-center px-6 py-2 gap-1 text-[1vw] border border-transparent hover:border-sky-500 duration-300 transition-color ease-in-out"
-                >
-                  Sign Out
-                </button>
-              </form>
-            </div>
+  if (error) {
+    console.error('Error fetching users:', error)
+    return (
+      <div className="p-8">
+        <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
+        <p className="text-red-500">Error loading data: {error.message}</p>
+      </div>
+    )
+  }
 
-            <div className="w-full">
-              <ul>
-                <Link href="{}" className="w-full">
-                  <li className="p-4 hover:bg-sky-100 hover:text-black w-full text-xl flex flex-row align-center gap-2 duration-300 transition-color ease-in-out text-gray-500">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="24"
-                      height="24"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      className="icon icon-tabler icons-tabler-outline icon-tabler-file-description"
-                    >
-                      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                      <path d="M14 3v4a1 1 0 0 0 1 1h4" />
-                      <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
-                      <path d="M9 17h6" />
-                      <path d="M9 13h6" />
-                    </svg>
-                    Examination
-                  </li>
-                </Link>
-                <Link href="" className="w-full">
-                  <li className="p-4 hover:bg-sky-100 hover:text-black duration-300 transition-color ease-in-out w-full text-xl flex flex-row align-center gap-2 text-gray-500">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="24"
-                      height="24"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      className="icon icon-tabler icons-tabler-outline icon-tabler-table-dashed"
-                    >
-                      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                      <path d="M3 5a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" />
-                      <path d="M3 10h18" />
-                      <path d="M10 3v18" />
-                    </svg>
-                    Results
-                  </li>
-                </Link>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-    </>
-  ) : (
-    redirect("/")
-  );
+  return (
+    <div className="p-8">
+      <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h2 className="text-xl font-semibold mb-4">Users</h2>
+        {users && users.length > 0 ? (
+          <table className="w-full border-collapse border border-gray-300 table-auto border-collapse border-spacing-2 space-y-2">
+            <thead className='text-left'>
+              <tr className='table-headings'>
+                <th>ID</th>
+                <th>Username</th>
+                <th>Password</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((user: any) => (
+
+                <tr key={user.id} className={user.name ? 'table-data text-black odd:bg-gray-100' : ''}>
+                  <td>{user.id}</td>
+                  <td>{user.name}</td>
+                  <td>{user.password}</td>
+                  <td><a href="#">Edit</a> | <a href="#">Delete</a></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="text-gray-500">No Users found. Create some users in your Supabase database!</p>
+        )}
+
+      </div>
+
+    </div>
+  )
 }
