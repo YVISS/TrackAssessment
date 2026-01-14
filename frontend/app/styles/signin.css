@@ -1,0 +1,48 @@
+.card {
+    width: 40vw;
+    max-width: 50vw;
+    min-height: 10vw;
+    height: auto;
+    border-radius: 50px;
+    background: #f0f9ff;
+    box-shadow:  20px 20px 60px rgb(70, 108, 150),
+                -20px -20px 60px rgb(53, 82, 114);
+    padding: 80px 60px;
+}
+
+.card-title{
+    font-size: 2.5rem;
+}
+
+input[type="text"],input[type="password"] {
+  box-shadow: 0 0 0 2px rgba(211, 211, 211, 0.5); /* soft highlight */
+  padding: 8px 12px;             /* optional */
+  border-radius: 6px;            /* round corners */
+  outline: none;                 /* remove the blue outline on focus */
+  transition: box-shadow 0.3s ease-in-out;
+  margin-bottom: 6px;
+}
+
+input[type="text"]:focus,input[type="password"]:focus{
+    box-shadow: 0 0 0 2px gray; /* soft highlight */
+    outline: none;
+}
+
+.card-password{
+    position: relative;
+}
+
+input{
+    width: 80%;
+    height: 4vh;
+}
+.showpw{
+    position: absolute;
+    top: 0;
+    right: 70px;
+    transition: 0.3s ease-in-out;
+}
+svg{
+    width: auto;
+    height: 32px;
+}
