@@ -4,7 +4,7 @@ import LogoutButton from "../../LogoutButton";
 
 export default function Sidebar() {
   return (
-    <div className="bg-stone-900 absolute left-0 top-0 min-h-screen min-w-3xs p-6 flex flex-col justify-between">
+    <div className="bg-stone-900 absolute left-0 top-0 min-h-screen w-100 p-6 flex flex-col justify-between">
       <div className="flex items-center justify-between">
         <p className="text-stone-400/60 text-lg">Track Assessment</p>
         <svg

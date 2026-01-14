@@ -2,7 +2,7 @@ from sklearn.ensemble import RandomForestClassifier
 import numpy as np
 import joblib
 
-# 🧠 Example training data (you will later replace this with your database data)
+# Example training data (you will later replace this with your database data)
 # Each list = student's ratings for subjects/skills [math, science, arts, sports, business, tech]
 X = np.array([
     [5, 5, 2, 1, 3, 4],  # Strong in math & science → STEM
