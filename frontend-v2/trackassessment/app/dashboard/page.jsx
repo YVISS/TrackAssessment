@@ -6,7 +6,6 @@ export default async function Dashboard(){
     await redirectIfNotAuthenticated();
     const supabase = await createClient();
     const {data} = await supabase.auth.getUser();
-
     return(
         <div className="flex bg-transparent">
             <main className="flex justify-center">

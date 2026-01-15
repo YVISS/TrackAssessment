@@ -1,8 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
 
-export async function updateSesssion(request) {
-  const respsonse = NextResponse.next({
+export async function updateSession(request) {
+  const response = NextResponse.next({
     request: { headers: request.headers }
   });
 
@@ -18,7 +18,7 @@ export async function updateSesssion(request) {
         },
         setAll(cookies) {
           cookies.forEach(({ name, value, options }) => {
-            respsonse.cookies.set(name, value, options);
+            response.cookies.set(name, value, options);
           });
         }
       }
@@ -27,5 +27,5 @@ export async function updateSesssion(request) {
 
   await supabase.auth.getUser()
 
-  return respsonse;
+  return response;
 }

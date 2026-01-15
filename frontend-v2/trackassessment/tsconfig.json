@@ -30,7 +30,7 @@
     "**/*.mts",
     "**/*.ts",
     "**/*.tsx"
-  ],
+, "app/_components/ui/Sidebar/SidebarLinks/page.jsx"  ],
   "exclude": [
     "node_modules"
   ]
