@@ -14,6 +14,7 @@ export default async function SignUpPage() {
             <label htmlFor="email" className="block text-sm text-zinc-300">
               Email
             </label>
+            <p id="alert-message text-white"></p>
             <input
               className="border-purple-300/30 border rounded py-2 px-4 w-100 
               focus:outline-2 focus:outline-purple-700 focus:outline-offset-2"
