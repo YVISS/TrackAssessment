@@ -37,8 +37,8 @@ export default function SidebarLinks() {
       icon: (
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          width="32"
-          height="32"
+          width="24"
+          height="24"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -60,8 +60,8 @@ export default function SidebarLinks() {
       icon: (
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          width="32"
-          height="32"
+          width="24"
+          height="24"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -88,7 +88,7 @@ export default function SidebarLinks() {
             <Link
               href={items.href}
               key={items.href}
-              className={`text-stone-50/30 px-4 py-4 flex items-center justify-start gap-8 text-xl rounded-xl hover:text-stone-50/90 hover:bg-stone-700/60 ease-in-out duration-300 
+              className={`text-stone-50/30 px-4 py-4 flex items-center justify-start gap-2 text-md rounded-xl hover:text-stone-50/90 hover:bg-stone-700/60 ease-in-out duration-300 
                         ${
                           isActive
                             ? "bg-stone-700/60 text-stone-50/90"

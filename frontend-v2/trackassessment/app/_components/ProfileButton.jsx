@@ -37,15 +37,15 @@ export default function ProfileButton() {
         className="w-full flex items-center justify-start"
       >
         {/* optional: replace with avatar/icon */}
-        <div className="relative flex w-full items-center px-4 py-2 gap-8 hover:text-stone-50/90 hover:bg-stone-700/60 rounded-xl">
-          <span className="text-stone-50/70 text-xl rounded-full bg-stone-400/20 py-2 px-4">
+        <div className="relative flex w-full items-center px-1 py-2 gap-2 hover:text-stone-50/90 hover:bg-stone-700/60 rounded-xl">
+          <span className="text-stone-50/70 text-sm rounded-full bg-stone-400/20 py-2 px-3.5">
             {user.email?.[0]?.toUpperCase() ?? "U"}
           </span>
-          <span className="text-xl text-stone-50/70">{user.email?.split("@")[0] ?? "Account"}</span>
+          <span className="text-sm text-stone-50/70">{user.email?.split("@")[0] ?? "Account"}</span>
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="34"
-            height="34"
+            width="24"
+            height="24"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
