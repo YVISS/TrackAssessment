@@ -101,13 +101,6 @@ export default function SidebarLinks() {
             </Link>
           );
         })}
-        {/* <Link
-          className=" hover:text-stone-50/90 hover:bg-stone-700/60 ease-in-out duration-300"
-          href={"/dashboard"}
-        >
-          
-          Home
-        </Link> */}
       </ul>
     </nav>
   );

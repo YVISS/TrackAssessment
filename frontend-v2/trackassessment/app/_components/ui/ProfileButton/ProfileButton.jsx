@@ -1,13 +1,12 @@
 "use client";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { createClient } from "../../utils/supabase/client";
+import { createClient } from "../../../../utils/supabase/client";
 
 export default function ProfileButton() {
   const [user, setUser] = useState(null);
   const router = useRouter();
-  const currentPath = usePathname();
 
   useEffect(() => {
     const supabase = createClient();
@@ -57,8 +56,8 @@ export default function ProfileButton() {
             <path stroke="none" d="M0 0h24v24H0z" fill="none" />
             <path d="M9 6l6 6l-6 6" />
           </svg>
-        </div>
-      </Link>
     </div>
+      </Link >
+    </div >
   );
 }
