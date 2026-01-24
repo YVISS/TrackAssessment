@@ -1,9 +1,8 @@
 import { createClient } from "../../utils/supabase/server";
 import { redirectIfNotAuthenticated } from "../../utils/redirectIfNotAuthenticated";
-import LogoutButton from "../_components/LogoutButton";
 
 export default async function Dashboard(){
-    await redirectIfNotAuthenticated();
+    const user = await redirectIfNotAuthenticated();
     const supabase = await createClient();
     const {data} = await supabase.auth.getUser();
     return(

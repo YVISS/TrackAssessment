@@ -37,7 +37,7 @@ export default function ProfileButton() {
         className="w-full flex items-center justify-start"
       >
         {/* optional: replace with avatar/icon */}
-        <div className="relative flex w-full items-center px-4 py-4 gap-8 hover:text-stone-50/90 hover:bg-stone-700/60 rounded-xl">
+        <div className="relative flex w-full items-center px-4 py-2 gap-8 hover:text-stone-50/90 hover:bg-stone-700/60 rounded-xl">
           <span className="text-stone-50/70 text-xl rounded-full bg-stone-400/20 py-2 px-4">
             {user.email?.[0]?.toUpperCase() ?? "U"}
           </span>
