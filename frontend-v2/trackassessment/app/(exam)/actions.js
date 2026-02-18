@@ -1,7 +1,7 @@
 'use server'
 
 import { redirect } from "next/navigation";
-import { createActionClient } from "../../../utils/supabase/actions";
+import { createActionClient } from "../../utils/supabase/actions";
 import { revalidatePath } from "next/cache";
 
 export async function submitExamAnswers(answersData) {
@@ -47,7 +47,7 @@ export async function getQuestions() {
     }
 
     const { data, error } = await supabase
-        .from('Questionnaires')
+        .from('EntrepreneurshipTest')
         .select('number, Questions, A, B, C, D, Answers')
         .order('number', { ascending: true });
 

@@ -48,7 +48,7 @@ export default function ProfileButton() {
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strtokewidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
             className="icon icon-tabler icons-tabler-outline icon-tabler-chevron-right text-stone-50/70 absolute right-0"
