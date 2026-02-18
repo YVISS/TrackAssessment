@@ -32,7 +32,7 @@ export default function SidebarLinks() {
     },
     // Assessment
     {
-      href: "/assessment",
+      href: "/take",
       label: "Assessment",
       icon: (
         <svg
