@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { submitExamAnswers } from "../actions";
-import { createClient } from "../../../utils/supabase/client";
+import { createClient } from "../../../../utils/supabase/client";
 import { useRouter } from "next/navigation";
 
 export default function TakeExamPage() {
@@ -26,7 +25,7 @@ export default function TakeExamPage() {
         return;
       }
 
-      // Fetch questions from Questionnaires table
+      // Fetch questions from table
       const { data, error } = await supabase
         .from("VerbalAbility")
         .select("number, Questions, A, B, C, D, Answers")
@@ -99,7 +98,7 @@ export default function TakeExamPage() {
 
   return (
     <div className="max-w-4xl mx-auto p-6">
-      
+
 
       {result ? (
         <div className="bg-stone-600/10 rounded-xl p-8 mb-8">
