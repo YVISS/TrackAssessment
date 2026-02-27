@@ -7,7 +7,7 @@ export default function Page() {
   const router = useRouter();
 
   const redirectToTest = () => {
-    router.replace("/test");
+    router.replace("/riasec/R");
   }
 
   const handleCheckboxChange = (event) => {
@@ -19,11 +19,7 @@ export default function Page() {
       <div className="flex flex-col gap-6 rounded-lg shadow-slate-200/20 border border-slate-200/10 shadow-2xl p-8 bg-slate-950/20">
         <h1 className="text-4xl font-bold">Directions</h1>
         <h2 className="text-xl">
-          This is a test of your verbal aptitude and your proficiency in
-          standard written English. It consists of six parts; identifying
-          errors, sentence completion, sentence correction, vocabulary, reading
-          comprehension, and paragraph organization. You will answer this test
-          within <strong>65 mins</strong>.
+          Please read the following instructions carefully before starting the test. Each part will have specific guidelines on how you will answer them. There will be no time limit but we recommend you to complete the test in one sitting. Make sure to find a quiet and comfortable environment to take the test. When you are ready, check the box below and click the "Start" button to begin. Good luck!
         </h2>
         <div className="flex flex-row gap-2 items-center">
           <input
