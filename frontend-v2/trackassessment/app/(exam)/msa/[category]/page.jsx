@@ -12,14 +12,15 @@ export default function MsaPage() {
   const supabase = useMemo(() => createClient(), []);
 
   const BASE_PATH = "/msa";
-  const START_CATEGORY = "VA";
+  const START_CATEGORY = "LR";
   const NEXT_MODULE_START = "/dashboard"; // ✅ msa -> dashboard
-  const PART = 1;
 
   const categoryCode = useMemo(() => {
     const raw = params?.category;
     return Array.isArray(raw) ? raw[0] : raw;
   }, [params]);
+
+  const isLR = categoryCode === "LR";
 
   const [category, setCategory] = useState(null);
   const [allCategories, setAllCategories] = useState([]);
@@ -109,7 +110,7 @@ export default function MsaPage() {
       // 4) Fetch PART questions for the category
       const { data: qs, error: qErr } = await supabase
         .from("msa_questions")
-        .select("question_number, questions, opt_a, opt_b, opt_c, opt_d")
+        .select("question_number, questions, opt_a, opt_b, opt_c, opt_d, opt_e, image_url")
         .eq("category_id", current.id)
         .order("question_number", { ascending: true });
 
@@ -161,7 +162,7 @@ export default function MsaPage() {
         user_id: user.id,
         category_id: category.id,
         question_number: Number(qnum),
-        answer: ans, // A/B/C/D
+        answer: ans, // A/B/C/D/E
       }));
 
       // ✅ upsert for retakes
@@ -195,6 +196,13 @@ export default function MsaPage() {
     );
   }
 
+  const getOptionImageUrl = (questionImageUrl, letter) => {
+    if (!questionImageUrl) return null;
+    const idx = questionImageUrl.lastIndexOf("LR-Question.webp");
+    if (idx === -1) return null;
+    return questionImageUrl.slice(0, idx) + `LR-OPT-${letter}.webp`;
+  };
+
   return (
     <div className="max-w-4xl mx-auto p-6">
       <form onSubmit={handleSubmit} className="space-y-8">
@@ -204,16 +212,30 @@ export default function MsaPage() {
               {q.question_number}. {q.questions}
             </h3>
 
-            <div className="space-y-3">
+            {q.image_url && (
+              <div className="mb-4 flex justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={q.image_url}
+                  alt={`Question ${q.question_number}`}
+                  className="max-w-full rounded-lg"
+                />
+              </div>
+            )}
+
+            <div className={isLR ? "grid grid-cols-2 md:grid-cols-5 gap-2" : "space-y-3"}>
               {[
                 { key: "A", text: q.opt_a },
                 { key: "B", text: q.opt_b },
                 { key: "C", text: q.opt_c },
                 { key: "D", text: q.opt_d },
+                { key: "E", text: q.opt_e },
               ].map((opt) => (
                 <label
                   key={opt.key}
-                  className="flex duration-300 ease-in-out items-center gap-3 p-3 rounded-lg hover:bg-stone-500/10 cursor-pointer"
+                  className={`flex duration-300 ease-in-out items-center gap-3 p-3 rounded-lg hover:bg-stone-500/10 cursor-pointer ${
+                    isLR ? "flex-col" : ""
+                  }`}
                 >
                   <input
                     type="radio"
@@ -222,9 +244,22 @@ export default function MsaPage() {
                     checked={answers[q.question_number] === opt.key}
                     onChange={() => handleAnswerChange(q.question_number, opt.key)}
                   />
-                  <span>
-                    <strong>{opt.key}.</strong> {opt.text}
-                  </span>
+                  {isLR ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={getOptionImageUrl(q.image_url, opt.key)}
+                        alt={`Option ${opt.key}`}
+                        className="max-w-full rounded"
+                        onError={(e) => { e.currentTarget.style.display = "none"; }}
+                      />
+                      <span className="font-semibold">{opt.key}</span>
+                    </>
+                  ) : (
+                    <span>
+                      <strong>{opt.key}.</strong> {opt.text}
+                    </span>
+                  )}
                 </label>
               ))}
             </div>
