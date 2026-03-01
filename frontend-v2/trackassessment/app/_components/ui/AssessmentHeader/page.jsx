@@ -12,49 +12,7 @@ export default function AssessmentHeader() {
           <a href="/dashboard">Back to Home</a>
         </div>
       );
-    case "/riasec/R":
-      return (
-        <div className="flex items-center justify-between mb-8 mx-auto max-w-4xl p-6">
-          <h1 className="text-3xl font-bold">RIASEC 1 - Realistic</h1>
-          <a href="/dashboard">Back to Home</a>
-        </div>
-      );
-    case "/riasec/I":
-      return (
-        <div className="flex items-center justify-between mb-8 mx-auto max-w-4xl p-6">
-          <h1 className="text-3xl font-bold">RIASEC 1 - Investigative</h1>
-          <a href="/dashboard">Back to Home</a>
-        </div>
-      );
-    case "/riasec/A":
-      return (
-        <div className="flex items-center justify-between mb-8 mx-auto max-w-4xl p-6">
-          <h1 className="text-3xl font-bold">RIASEC 1 - Artistic</h1>
-          <a href="/dashboard">Back to Home</a>
-        </div>
-      );
-    case "/riasec/S":
-      return (
-        <div className="flex items-center justify-between mb-8 mx-auto max-w-4xl p-6">
-          <h1 className="text-3xl font-bold">RIASEC 1 - Social</h1>
-          <a href="/dashboard">Back to Home</a>
-        </div>
-      );
-    case "/riasec/E":
-      return (
-        <div className="flex items-center justify-between mb-8 mx-auto max-w-4xl p-6">
-          <h1 className="text-3xl font-bold">RIASEC 1 - Enterprising</h1>
-          <a href="/dashboard">Back to Home</a>
-        </div>
-      );
-    case "/riasec/C":
-      return (
-        <div className="flex items-center justify-between mb-8 mx-auto max-w-4xl p-6">
-          <h1 className="text-3xl font-bold">RIASEC 1 - Conventional</h1>
-          <a href="/dashboard">Back to Home</a>
-        </div>
-      );
-      case "/msa/VA":
+    case "/msa/VA":
       return (
         <div className="flex items-center justify-between mb-8 mx-auto max-w-4xl p-6">
           <h1 className="text-3xl font-bold">MSA - Verbal Ability</h1>

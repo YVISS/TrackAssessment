@@ -13,7 +13,7 @@ export default function MsaPage() {
 
   const BASE_PATH = "/msa";
   const START_CATEGORY = "VA";
-  const NEXT_MODULE_START = "/riasec2/VA"; // ✅ msa -> riasec2
+  const NEXT_MODULE_START = "/dashboard"; // ✅ msa -> dashboard
   const PART = 1;
 
   const categoryCode = useMemo(() => {
@@ -137,7 +137,7 @@ export default function MsaPage() {
     const next = allCategories[index + 1];
 
     if (next) router.push(`${BASE_PATH}/${next.code}`);
-    else router.push(NEXT_MODULE_START); // ✅ end msa -> riasec2
+    else router.push(NEXT_MODULE_START); // ✅ end msa -> dashboard
   };
 
   const handleSubmit = async (e) => {
