@@ -41,6 +41,10 @@ export default function Riasec2CategoryPage() {
   };
 
   useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [categoryCode]);
+
+  useEffect(() => {
     async function init() {
       setLoading(true);
       setErrorMsg("");
@@ -216,7 +220,7 @@ export default function Riasec2CategoryPage() {
   return (
     <div className="max-w-4xl mx-auto p-6">
       {/* Progress Counter */}
-      <div className="mb-6 bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+      <div className="sticky top-0 z-50 mb-6 bg-slate-800/50 rounded-xl p-4 border border-slate-700">
         <div className="flex justify-between text-sm text-slate-300 mb-2">
           <span>Question {Object.keys(answers).length} of {questions.length}</span>
           <span>{questions.length > 0 ? Math.round((Object.keys(answers).length / questions.length) * 100) : 0}%</span>

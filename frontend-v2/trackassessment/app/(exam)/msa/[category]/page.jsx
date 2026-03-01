@@ -43,6 +43,10 @@ export default function MsaPage() {
   };
 
   useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [categoryCode]);
+
+  useEffect(() => {
     async function init() {
       setLoading(true);
       setErrorMsg("");
@@ -209,7 +213,7 @@ export default function MsaPage() {
   return (
     <div className="max-w-4xl mx-auto p-6">
       {/* Progress Counter */}
-      <div className="mb-6 bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+      <div className="sticky top-0 z-50 mb-6 bg-slate-800/50 rounded-xl p-4 border border-slate-700">
         <div className="flex justify-between text-sm text-slate-300 mb-2">
           <span>Question {Object.keys(answers).length} of {questions.length}</span>
           <span>{questions.length > 0 ? Math.round((Object.keys(answers).length / questions.length) * 100) : 0}%</span>
@@ -222,8 +226,18 @@ export default function MsaPage() {
         </div>
       </div>
       <form onSubmit={handleSubmit} className="space-y-8">
-        {questions.map((q) => (
+        {questions.map((q, questionIndex) => (
           <div key={q.question_number} className="bg-slate-800/50 p-6 rounded-xl border border-slate-700">
+            {categoryCode === "VA" && questionIndex === 0 && (
+              <div className="bg-slate-700/50 p-6 rounded-lg mb-6 border border-slate-600">
+                <p className="text-slate-50 leading-relaxed">
+                  About fifty years ago, plant physiologists set out to grow roots by themselves in solutions in laboratory flasks. The scientists found that the nutrition of isolated roots was quite simple. They required sugar and the usual minerals and vitamins. However, they did not require organic nitrogen compounds. These roots got along fine on mineral inorganic nitrogen. Roots are capable of making their own proteins and other organic compounds. These activities by roots require energy, of course. The process of respiration uses sugar to make the high energy compound ATP, which drives the biochemical reactions. Respiration also requires oxygen. Highly active roots require a good deal of oxygen.
+                </p>
+                <p className="text-slate-50 leading-relaxed mt-4">
+                  The study of isolated roots has provided an understanding of the relationship between shoots and roots in intact plants. The leaves of the shoots provide the roots with sugar and vitamins, and the roots provide the shoots with water and minerals. In addition, roots can provide the shoots with organic nitrogen compounds. This comes in handy for the growth of buds in the early spring when leaves are not yet functioning. Once leaves begin photosynthesizing, they produce protein, but only mature leaves can {'"'}export{'"'} protein to the rest of the plant in the form of amino acids.
+                </p>
+              </div>
+            )}
             <h3 className="font-semibold mb-4">
               {q.question_number}. {q.questions}
             </h3>
