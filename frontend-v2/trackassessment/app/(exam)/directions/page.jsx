@@ -31,7 +31,7 @@ export default function Page() {
             id="ready-radio"
             name="ready-radio"
             onChange={handleCheckboxChange}
-            className="mt-1 w-4 h-4 text-purple-600 focus:ring-purple-500 cursor-pointer"
+            className="mt-1 w-4 h-4 text-sky-600 focus:ring-sky-500 cursor-pointer"
           />
           <label htmlFor="ready-radio" className={`cursor-pointer transition-colors duration-300 ${isReady ? "text-green-400 font-medium" : ""}`}>
             {isReady && <span className="mr-1" aria-hidden="true">✓</span>}
@@ -41,7 +41,7 @@ export default function Page() {
         <button
           onClick={redirectToTest}
           disabled={!isReady || isStarting}
-          className="flex items-center justify-center w-full text-xl px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
+          className="flex items-center justify-center w-full text-xl px-6 py-3 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-sky-600"
         >
           {isStarting && (
             <svg className="mr-2 h-5 w-5 animate-spin" viewBox="0 0 24 24" aria-hidden="true">

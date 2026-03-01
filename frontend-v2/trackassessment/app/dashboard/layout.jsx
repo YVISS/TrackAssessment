@@ -13,7 +13,7 @@ export default function DashboardLayout({ children }) {
       >
         <Sidebar />
       </div>
-      <div className="flex items-center p-4 pl-10 border-b border-stone-700/50">
+      <div className="flex items-center p-4 pl-10 border-b border-slate-700/50">
         <button
           aria-label="Toggle sidebar"
           className={`absolute top-4 z-30 rounded-full hover:cursor-pointer transition-transform duration-300 ease-in-out translate-x-0 
@@ -59,7 +59,7 @@ export default function DashboardLayout({ children }) {
             </svg>
           )}
         </button>
-        <h1 className="text-stone-400 text-2xl">Dashboard</h1>
+        <h1 className="text-slate-400 text-2xl">Dashboard</h1>
       </div>
 
       <main className={`transition-all duration-300`}>{children}</main>

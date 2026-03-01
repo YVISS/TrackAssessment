@@ -14,8 +14,8 @@ export default function SubmitButton({
         disabled={pending}
         aria-busy={pending}
         className={`inline-flex w-inherit items-center justify-center rounded-xl px-4 py-2.5 text-sm font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-all duration-200
-            focus:outline-none focus:ring-2 focus:ring-purple-400/70 
-            ${pending ? 'bg-purple-400 cursor-not-allowed opacity-70' : 'bg-purple-600 hover:bg-purple-500 active:bg-purple-700'} ` + className}
+            focus:outline-none focus:ring-2 focus:ring-sky-400/70 
+            ${pending ? 'bg-sky-400 cursor-not-allowed opacity-70' : 'bg-sky-600 hover:bg-sky-500 active:bg-sky-700'} ` + className}
         >
             {pending && (
                 <svg className="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" aria-hidden="true">

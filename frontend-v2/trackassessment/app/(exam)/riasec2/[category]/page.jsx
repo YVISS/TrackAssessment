@@ -205,7 +205,7 @@ export default function Riasec2CategoryPage() {
   if (errorMsg) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
-        <div className="max-w-lg w-full bg-stone-600/10 rounded-xl p-6">
+        <div className="max-w-lg w-full bg-slate-800/50 rounded-xl p-6">
           <div className="font-semibold mb-2">Error</div>
           <div className="text-sm opacity-80">{errorMsg}</div>
         </div>
@@ -215,11 +215,24 @@ export default function Riasec2CategoryPage() {
 
   return (
     <div className="max-w-4xl mx-auto p-6">
+      {/* Progress Counter */}
+      <div className="mb-6 bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+        <div className="flex justify-between text-sm text-slate-300 mb-2">
+          <span>Question {Object.keys(answers).length} of {questions.length}</span>
+          <span>{questions.length > 0 ? Math.round((Object.keys(answers).length / questions.length) * 100) : 0}%</span>
+        </div>
+        <div className="w-full bg-slate-700 rounded-full h-2">
+          <div
+            className="bg-sky-500 h-2 rounded-full transition-all duration-300"
+            style={{ width: `${questions.length > 0 ? (Object.keys(answers).length / questions.length) * 100 : 0}%` }}
+          />
+        </div>
+      </div>
       <form onSubmit={handleSubmit} className="space-y-8">
         {questions.map((q) => (
           <div
             key={q.question_number}
-            className="bg-stone-600/10 rounded-xl p-6"
+            className="bg-slate-800/50 rounded-xl p-6 border border-slate-700"
           >
             <h3 className="text-lg font-semibold mb-4">
               {q.question_number}. {q.question}
@@ -229,7 +242,7 @@ export default function Riasec2CategoryPage() {
               {[1, 2, 3, 4, 5].map((value) => (
                 <label
                   key={value}
-                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-stone-500/10 cursor-pointer"
+                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-700/30 cursor-pointer"
                 >
                   <input
                     type="radio"
@@ -257,14 +270,14 @@ export default function Riasec2CategoryPage() {
           <button
             type="submit"
             disabled={!allAnswered || submitting}
-            className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-500 disabled:cursor-not-allowed text-white font-semibold py-3 px-8 rounded-lg"
+            className="bg-sky-600 hover:bg-sky-700 disabled:bg-gray-500 disabled:cursor-not-allowed text-white font-semibold py-3 px-8 rounded-lg"
           >
             {submitting ? "Submitting..." : "Finish"}
           </button>
         </div>
 
         {!allAnswered && (
-          <p className="text-center text-sm text-yellow-400">
+          <p className="text-center text-sm text-sky-400">
             Please answer all questions ({Object.keys(answers).length}/
             {questions.length})
           </p>
