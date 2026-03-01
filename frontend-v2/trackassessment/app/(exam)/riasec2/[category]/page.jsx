@@ -64,7 +64,6 @@ export default function Riasec2CategoryPage() {
       const { data: cats, error: catsErr } = await supabase
         .from("riasec_categories")
         .select("id, code, name")
-        .eq("assessment", ASSESSMENT)
         .order("id", { ascending: true });
 
       if (catsErr) {
@@ -95,7 +94,10 @@ export default function Riasec2CategoryPage() {
         .from("riasec_answers")
         .select("category_id")
         .eq("user_id", user.id)
-        .in("category_id", catList.map((c) => c.id));
+        .in(
+          "category_id",
+          catList.map((c) => c.id),
+        );
 
       if (ansErr) {
         console.error(ansErr);
@@ -104,7 +106,9 @@ export default function Riasec2CategoryPage() {
         return;
       }
 
-      const answeredSet = new Set((answeredRows || []).map((r) => r.category_id));
+      const answeredSet = new Set(
+        (answeredRows || []).map((r) => r.category_id),
+      );
 
       if (answeredSet.has(current.id)) {
         redirectNextUnanswered(catList, answeredSet);
@@ -117,7 +121,6 @@ export default function Riasec2CategoryPage() {
       const { data: qs, error: qsErr } = await supabase
         .from("riasec_questions")
         .select("question_number, question")
-        .eq("assessment", ASSESSMENT)
         .eq("category_id", current.id)
         .order("question_number", { ascending: true });
 
@@ -189,7 +192,11 @@ export default function Riasec2CategoryPage() {
   };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        Loading...
+      </div>
+    );
   }
 
   if (errorMsg) {
@@ -207,20 +214,28 @@ export default function Riasec2CategoryPage() {
     <div className="max-w-4xl mx-auto p-6">
       <form onSubmit={handleSubmit} className="space-y-8">
         {questions.map((q) => (
-          <div key={q.question_number} className="bg-stone-600/10 rounded-xl p-6">
+          <div
+            key={q.question_number}
+            className="bg-stone-600/10 rounded-xl p-6"
+          >
             <h3 className="text-lg font-semibold mb-4">
               {q.question_number}. {q.question}
             </h3>
 
             <div className="space-y-2">
               {[1, 2, 3, 4, 5].map((value) => (
-                <label key={value} className="flex items-center gap-3 p-3 rounded-lg hover:bg-stone-500/10 cursor-pointer">
+                <label
+                  key={value}
+                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-stone-500/10 cursor-pointer"
+                >
                   <input
                     type="radio"
                     name={`question-${q.question_number}`}
                     value={value}
                     checked={answers[q.question_number] === value}
-                    onChange={() => handleAnswerChange(q.question_number, value)}
+                    onChange={() =>
+                      handleAnswerChange(q.question_number, value)
+                    }
                   />
                   <span>
                     {value === 1 && `${value} - Strongly Disagree`}
@@ -247,7 +262,8 @@ export default function Riasec2CategoryPage() {
 
         {!allAnswered && (
           <p className="text-center text-sm text-yellow-400">
-            Please answer all questions ({Object.keys(answers).length}/{questions.length})
+            Please answer all questions ({Object.keys(answers).length}/
+            {questions.length})
           </p>
         )}
       </form>
