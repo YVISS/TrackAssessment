@@ -4,10 +4,10 @@ import ProfileButton from "../ProfileButton/ProfileButton";
 import { Suspense } from "react";
 export default function Sidebar() {
   return (
-    <div className="relative bg-stone-900 left-0 top-0 min-h-screen w-60 p-6 flex flex-col justify-between duration-300 ">
+    <div className="relative bg-slate-900 left-0 top-0 min-h-screen w-60 p-6 flex flex-col justify-between duration-300 ">
 
       <div className="flex items-center justify-end">
-        <p className="text-stone-400/80 text-sm">Track Assessment</p>
+        <p className="text-slate-400/80 text-sm">Track Assessment</p>
       </div>
 
       <SidebarLinks></SidebarLinks>
