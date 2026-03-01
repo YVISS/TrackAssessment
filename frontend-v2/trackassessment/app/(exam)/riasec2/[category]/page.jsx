@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "../../../../utils/supabase/client";
+import { toast } from "sonner";
 
 export default function Riasec2CategoryPage() {
   const router = useRouter();
@@ -182,10 +183,12 @@ export default function Riasec2CategoryPage() {
 
       if (error) throw error;
 
+      toast.success("Answers submitted successfully!");
       goNext();
     } catch (err) {
       console.error(err);
       setErrorMsg("Submit failed. Please try again.");
+      toast.error("Submit failed. Please try again.");
     } finally {
       setSubmitting(false);
     }
