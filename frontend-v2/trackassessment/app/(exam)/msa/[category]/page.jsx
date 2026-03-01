@@ -260,7 +260,9 @@ export default function MsaPage() {
                 { key: "C", text: q.opt_c },
                 { key: "D", text: q.opt_d },
                 { key: "E", text: q.opt_e },
-              ].map((opt) => (
+              ]
+              .filter((opt) => opt.text) // Filter out null/empty options
+              .map((opt) => (
                 <label
                   key={opt.key}
                   className={`flex duration-300 ease-in-out items-center gap-3 p-3 rounded-lg hover:bg-slate-700/30 cursor-pointer ${
