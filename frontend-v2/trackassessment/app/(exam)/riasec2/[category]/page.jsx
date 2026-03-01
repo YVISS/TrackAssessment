@@ -13,7 +13,7 @@ export default function Riasec2CategoryPage() {
 
   const ASSESSMENT = "riasec2";
   const BASE_PATH = "/riasec2";
-  const DONE_REDIRECT = "/dashboard"; // ✅ riasec2 -> done
+  const DONE_REDIRECT = "/msa/VA"; // ✅ riasec2 -> msa
 
   const categoryCode = useMemo(() => {
     const raw = params?.category;

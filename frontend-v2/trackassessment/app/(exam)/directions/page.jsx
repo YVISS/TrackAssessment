@@ -7,7 +7,7 @@ export default function Page() {
   const router = useRouter();
 
   const redirectToTest = () => {
-    router.replace("/riasec/R");
+    router.replace("/riasec2/VA");
   }
 
   const handleCheckboxChange = (event) => {
