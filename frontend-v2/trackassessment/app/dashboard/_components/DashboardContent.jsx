@@ -203,24 +203,10 @@ export default function DashboardContent() {
 
           if (data.error) throw new Error(data.error);
 
-          // The aggregate endpoint only returns ability averages, not
-          // per-track or full RIASEC data, so we show what we have.
-          const avgScores = data.average_scores ?? {};
-          // Map the aggregate fields to MSA label keys where possible
-          const msaFieldMap = {
-            numerical_ability: "numerical_ability",
-            clerical_ability: "clerical_ability",
-            interpersonal_skills_test: "interpersonal_skills_test",
-            mechanical_ability: "mechanical_ability",
-            va_et: "verbal_ability", // va_et represents verbal + entrepreneurship average
-            st_lr: "science_test",  // st_lr represents science + logical reasoning average
-          };
-          msaScores = Object.fromEntries(
-            Object.entries(avgScores).map(([k, v]) => [
-              msaFieldMap[k] ?? k,
-              v,
-            ])
-          );
+          // Use the backend's pre-computed top 3 lists directly
+          trackScores = Object.fromEntries(data.top_3_tracks || []);
+          riasecScores = Object.fromEntries(data.top_3_riasec || []);
+          msaScores = Object.fromEntries(data.top_3_msa || []);
         }
 
         // Compute top 3 from each dataset
