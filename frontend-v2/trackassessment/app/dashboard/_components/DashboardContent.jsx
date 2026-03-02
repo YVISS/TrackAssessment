@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createClient } from "@/utils/supabase/client";
 import RiasecRadarChart from "./RiasecRadarChart";
 
 // Label maps for RIASEC categories and MSA abilities
@@ -135,16 +136,12 @@ function TopThreeCard({ title, icon, items, labelMap, colors, barMax }) {
 }
 
 /**
- * DashboardContent fetches data from the backend and renders the three
- * top-3 cards: Tracks, RIASEC, and MSA.
- *
- * Data source: The component calls /top-3-analysis for aggregate stats and,
- * when a student's own prediction data is available (stored in localStorage
- * after the assessment is submitted), it uses that instead to show personalized
- * results.  If no data is available at all, placeholder skeleton cards are
- * shown until the user completes the assessment.
+ * DashboardContent fetches the authenticated user's latest assessment result
+ * from the backend `/student-result/{user_id}` endpoint and renders the three
+ * top-3 cards: Tracks, RIASEC, and MSA, along with the RIASEC Radar Chart.
  */
 export default function DashboardContent() {
+  const supabase = useMemo(() => createClient(), []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [topTracks, setTopTracks] = useState([]);
@@ -158,64 +155,72 @@ export default function DashboardContent() {
         setLoading(true);
         setError(null);
 
+        // Get current authenticated user
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (!user) {
+          setError("User not authenticated");
+          setLoading(false);
+          return;
+        }
+
+        // Fetch user's latest assessment result from backend
         const apiBase =
           process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const res = await fetch(`${apiBase}/student-result/${user.id}`);
 
-        // Prefer the student's most-recent personal prediction data stored in
-        // localStorage by the assessment submission flow, so the dashboard
-        // always reflects the current user's own scores.
-        const cached = localStorage.getItem("lastPrediction");
+        if (!res.ok) throw new Error(`API error: ${res.status}`);
+        const data = await res.json();
 
-        let trackScores = null;
-        let riasecScores = null;
-        let msaScores = null;
+        if (data.error) throw new Error(data.error);
 
-        if (cached) {
-          try {
-            const parsed = JSON.parse(cached);
-            trackScores = parsed.track_scores ?? null;
-            riasecScores = parsed.riasec_scores ?? null;
-            if (riasecScores) setPersonalRiasecScores(riasecScores);
-            // MSA scores come from the individual ability fields
-            const msaFields = [
-              "verbal_ability",
-              "numerical_ability",
-              "science_test",
-              "clerical_ability",
-              "interpersonal_skills_test",
-              "logical_reasoning",
-              "entrepreneurship_test",
-              "mechanical_ability",
-            ];
-            const hasMsa = msaFields.some((f) => f in parsed);
-            if (hasMsa) {
-              msaScores = Object.fromEntries(
-                msaFields.map((f) => [f, parsed[f] ?? 0])
-              );
-            }
-          } catch {
-            // Ignore parse errors; fall through to API call
-          }
+        // Extract track scores
+        if (data.TVL !== undefined) {
+          setTopTracks(
+            [
+              ["TVL", data.TVL],
+              ["STEM", data.STEM],
+              ["ABM", data.ABM],
+              ["HUMSS", data.HUMSS],
+              ["Arts", data.Arts],
+              ["Sports", data.Sports],
+            ]
+              .filter(([, v]) => v !== undefined)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 3)
+          );
         }
 
-        // Fall back to /top-3-analysis aggregate data when no personal data exists
-        if (!trackScores && !riasecScores && !msaScores) {
-          const res = await fetch(`${apiBase}/top-3-analysis`);
-          if (!res.ok) throw new Error(`API error: ${res.status}`);
-          const data = await res.json();
-
-          if (data.error) throw new Error(data.error);
-
-          // Use the backend's pre-computed top 3 lists directly
-          trackScores = Object.fromEntries(data.top_3_tracks || []);
-          riasecScores = Object.fromEntries(data.top_3_riasec || []);
-          msaScores = Object.fromEntries(data.top_3_msa || []);
+        // Extract RIASEC scores
+        if (data.realistic !== undefined) {
+          const riasecScores = {
+            realistic: data.realistic,
+            investigative: data.investigative,
+            artistic: data.artistic,
+            social: data.social,
+            enterprising: data.enterprising,
+            conventional: data.conventional,
+          };
+          setPersonalRiasecScores(riasecScores);
+          setTopRiasec(getTopN(riasecScores, 3));
         }
 
-        // Compute top 3 from each dataset
-        if (trackScores) setTopTracks(getTopN(trackScores, 3));
-        if (riasecScores) setTopRiasec(getTopN(riasecScores, 3));
-        if (msaScores) setTopMsa(getTopN(msaScores, 3));
+        // Extract MSA scores
+        const msaScores = Object.fromEntries(
+          Object.entries({
+            verbal_ability: data.verbal_ability,
+            numerical_ability: data.numerical_ability,
+            science_test: data.science_test,
+            clerical_ability: data.clerical_ability,
+            interpersonal_skills_test: data.interpersonal_skills_test,
+            logical_reasoning: data.logical_reasoning,
+            entrepreneurship_test: data.entrepreneurship_test,
+            mechanical_ability: data.mechanical_ability,
+          }).filter(([, v]) => v !== undefined)
+        );
+        if (Object.keys(msaScores).length > 0) {
+          setTopMsa(getTopN(msaScores, 3));
+        }
       } catch (err) {
         setError(err.message ?? "Failed to load dashboard data.");
       } finally {
@@ -224,7 +229,7 @@ export default function DashboardContent() {
     }
 
     fetchData();
-  }, []);
+  }, [supabase]);
 
   // ── Icons ────────────────────────────────────────────────────────────────
   const TrackIcon = (

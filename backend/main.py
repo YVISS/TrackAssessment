@@ -25,6 +25,7 @@ from supabase_client import (
     fetch_riasec_categories,
     fetch_riasec_answers,
     get_user_result,
+    get_latest_student_submission,
 )
 
 app = FastAPI()
@@ -794,3 +795,20 @@ def get_user_result_endpoint(user_id: str):
         raise
     except Exception as e:
         return {"error": str(e), "type": type(e).__name__}
+
+
+@app.get("/student-result/{user_id}")
+def get_student_result(user_id: str):
+    """
+    Get the latest assessment result for a specific user from student_submission table.
+    Returns all scores: MSA abilities, RIASEC scores, track scores.
+    """
+    try:
+        result = get_latest_student_submission(user_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"No result found for user_id: {user_id}")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"error": str(e)}
