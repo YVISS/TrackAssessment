@@ -54,59 +54,59 @@ export default function AssessmentHeader() {
           <a href="/dashboard">Back to Home</a>
         </div>
       );
-      case "/riasec2/VA":
+      case "/msa/LR":
       return (
         <div className="flex items-center justify-between mb-8 mx-auto max-w-4xl p-6">
-          <h1 className="text-3xl font-bold">RIASEC 2 - Verbal Ability</h1>
+          <h1 className="text-3xl font-bold">MSA - Logical Reasoning</h1>
           <a href="/dashboard">Back to Home</a>
         </div>
       );
-      case "/riasec2/NA":
+      case "/msa/MA":
       return (
         <div className="flex items-center justify-between mb-8 mx-auto max-w-4xl p-6">
-          <h1 className="text-3xl font-bold">RIASEC 2 - Numerical Ability</h1>
+          <h1 className="text-3xl font-bold">MSA - Mechanical Ability</h1>
           <a href="/dashboard">Back to Home</a>
         </div>
       );
-      case "/riasec2/ST":
+      case "/riasec2/R":
       return (
         <div className="flex items-center justify-between mb-8 mx-auto max-w-4xl p-6">
-          <h1 className="text-3xl font-bold">RIASEC 2 - Science Test</h1>
+          <h1 className="text-3xl font-bold">RIASEC - Realistic</h1>
           <a href="/dashboard">Back to Home</a>
         </div>
       );
-      case "/riasec2/CA":
+      case "/riasec2/I":
       return (
         <div className="flex items-center justify-between mb-8 mx-auto max-w-4xl p-6">
-          <h1 className="text-3xl font-bold">RIASEC 2 - Clerical Ability</h1>
+          <h1 className="text-3xl font-bold">RIASEC - Invesigative</h1>
           <a href="/dashboard">Back to Home</a>
         </div>
       );
-      case "/riasec2/IST":
+      case "/riasec2/A":
       return (
         <div className="flex items-center justify-between mb-8 mx-auto max-w-4xl p-6">
-          <h1 className="text-3xl font-bold">RIASEC 2 - Interpersonal Skill Test</h1>
+          <h1 className="text-3xl font-bold">RIASEC - Artistic</h1>
           <a href="/dashboard">Back to Home</a>
         </div>
       );
-      case "/riasec2/ET":
+      case "/riasec2/S":
       return (
         <div className="flex items-center justify-between mb-8 mx-auto max-w-4xl p-6">
-          <h1 className="text-3xl font-bold">RIASEC 2 - Entrepreneurship Test</h1>
+          <h1 className="text-3xl font-bold">RIASEC - Social</h1>
           <a href="/dashboard">Back to Home</a>
         </div>
       );
-      case "/riasec2/LR":
+      case "/riasec2/E":
       return (
         <div className="flex items-center justify-between mb-8 mx-auto max-w-4xl p-6">
-          <h1 className="text-3xl font-bold">RIASEC 2 - Logical Reasoning</h1>
+          <h1 className="text-3xl font-bold">RIASEC - Enterprising</h1>
           <a href="/dashboard">Back to Home</a>
         </div>
       );
-      case "/riasec2/MA":
+      case "/riasec2/C":
       return (
         <div className="flex items-center justify-between mb-8 mx-auto max-w-4xl p-6">
-          <h1 className="text-3xl font-bold">RIASEC 2 - Mechanical Ability</h1>
+          <h1 className="text-3xl font-bold">RIASEC - Conventional</h1>
           <a href="/dashboard">Back to Home</a>
         </div>
       );
