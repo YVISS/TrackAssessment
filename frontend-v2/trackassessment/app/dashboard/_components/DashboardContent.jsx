@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@/utils/supabase/client";
+import { createClient } from "../../../utils/supabase/client";
 import RiasecRadarChart from "./RiasecRadarChart";
 
 // Label maps for RIASEC categories and MSA abilities
