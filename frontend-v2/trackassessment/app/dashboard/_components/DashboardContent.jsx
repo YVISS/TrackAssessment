@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import RiasecRadarChart from "./RiasecRadarChart";
 
 // Label maps for RIASEC categories and MSA abilities
 const RIASEC_LABELS = {
@@ -149,6 +150,7 @@ export default function DashboardContent() {
   const [topTracks, setTopTracks] = useState([]);
   const [topRiasec, setTopRiasec] = useState([]);
   const [topMsa, setTopMsa] = useState([]);
+  const [personalRiasecScores, setPersonalRiasecScores] = useState(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -173,6 +175,7 @@ export default function DashboardContent() {
             const parsed = JSON.parse(cached);
             trackScores = parsed.track_scores ?? null;
             riasecScores = parsed.riasec_scores ?? null;
+            if (riasecScores) setPersonalRiasecScores(riasecScores);
             // MSA scores come from the individual ability fields
             const msaFields = [
               "verbal_ability",
@@ -319,6 +322,9 @@ export default function DashboardContent() {
           barMax={5}
         />
       </div>
+
+      {/* RIASEC Radar Chart – full 6-dimension interest profile */}
+      <RiasecRadarChart riasecScores={personalRiasecScores} />
     </div>
   );
 }
