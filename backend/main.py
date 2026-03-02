@@ -55,7 +55,25 @@ MODEL_FEATURES = [
     "mechanical_ability"
 ]
 
-def get_model_prediction(data: StudentData):
+
+class StudentData(BaseModel):
+    verbal_ability: int
+    numerical_ability: int
+    science_test: int
+    clerical_ability: int
+    interpersonal_skills_test: int
+    logical_reasoning: int
+    entrepreneurship_test: int
+    mechanical_ability: int
+    realistic: int = 0
+    investigative: int = 0
+    artistic: int = 0
+    social: int = 0
+    enterprising: int = 0
+    conventional: int = 0
+
+
+def get_model_prediction(data: "StudentData"):
     """Get prediction from Random Forest model"""
     try:
         # Prepare features in the correct order
@@ -381,23 +399,6 @@ def _background_sync():
         except Exception as e:
             print(f"Background sync failed: {str(e)}")
         time.sleep(SYNC_INTERVAL_SECONDS)
-
-
-class StudentData(BaseModel):
-    verbal_ability: int
-    numerical_ability: int
-    science_test: int
-    clerical_ability: int
-    interpersonal_skills_test: int
-    logical_reasoning: int
-    entrepreneurship_test: int
-    mechanical_ability: int
-    realistic: int = 0
-    investigative: int = 0
-    artistic: int = 0
-    social: int = 0
-    enterprising: int = 0
-    conventional: int = 0
 
 
 @app.get("/")

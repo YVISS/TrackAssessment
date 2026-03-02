@@ -32,7 +32,7 @@ export default function ProfileButton() {
   return (
     <div className="w-full">
       <Link
-        href={`/profile/${user.id}`}
+        href="#"
         className="w-full flex items-center justify-start"
       >
         {/* optional: replace with avatar/icon */}
