@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import joblib
 import threading
@@ -17,6 +17,12 @@ from supabase_client import (
     generate_result_id,
     normalize_strand,
     update_prediction,
+    fetch_msa_categories,
+    fetch_msa_questions,
+    fetch_msa_answers,
+    fetch_riasec_categories,
+    fetch_riasec_answers,
+    get_user_result,
 )
 
 app = FastAPI()
@@ -579,5 +585,198 @@ def predict_track(data: StudentData):
             "final_track": ml_prediction,
             "db_status": db_status,
         }
+    except Exception as e:
+        return {"error": str(e), "type": type(e).__name__}
+
+
+# ---------------------------------------------------------------------------
+# MSA category code → student_submission column name
+# ---------------------------------------------------------------------------
+MSA_CODE_TO_FIELD = {
+    "VA": "verbal_ability",
+    "NA": "numerical_ability",
+    "ST": "science_test",
+    "CA": "clerical_ability",
+    "IST": "interpersonal_skills_test",
+    "ET": "entrepreneurship_test",
+    "LR": "logical_reasoning",
+    "MA": "mechanical_ability",
+}
+
+# RIASEC category code → student_submission column name
+RIASEC_CODE_TO_FIELD = {
+    "R": "realistic",
+    "I": "investigative",
+    "A": "artistic",
+    "S": "social",
+    "E": "enterprising",
+    "C": "conventional",
+}
+
+
+class ComputeFromSupabaseRequest(BaseModel):
+    user_id: str
+
+
+@app.post("/compute-from-supabase")
+def compute_from_supabase(request: ComputeFromSupabaseRequest):
+    """Fetch a user's MSA + RIASEC answers from Supabase, compute scores, and upsert into student_submission."""
+    try:
+        user_id = request.user_id
+
+        # -- Fetch reference data --
+        msa_categories = fetch_msa_categories()
+        msa_questions = fetch_msa_questions()
+        riasec_categories = fetch_riasec_categories()
+
+        # Build lookup maps
+        # right_answer keyed by (category_id, question_number)
+        right_answers = {
+            (q["category_id"], q["question_number"]): q["right_answer"]
+            for q in msa_questions
+        }
+        # total questions per category for normalisation
+        questions_per_msa_cat: dict = {}
+        for q in msa_questions:
+            cat_id = q["category_id"]
+            questions_per_msa_cat[cat_id] = questions_per_msa_cat.get(cat_id, 0) + 1
+
+        # -- Grade MSA answers --
+        msa_answers = fetch_msa_answers(user_id)
+        correct_per_cat: dict = {}
+        for ans in msa_answers:
+            cat_id = ans["category_id"]
+            q_num = ans["question_number"]
+            correct = right_answers.get((cat_id, q_num))
+            if correct is not None and ans["answer"] == correct:
+                correct_per_cat[cat_id] = correct_per_cat.get(cat_id, 0) + 1
+
+        # Compute ability score (0–5 scale: correct / total * 5)
+        ability_scores: dict = {}
+        for cat in msa_categories:
+            cat_id = cat["id"]
+            code = cat["code"]
+            field = MSA_CODE_TO_FIELD.get(code)
+            if field is None:
+                continue
+            total = questions_per_msa_cat.get(cat_id, 0)
+            if total == 0:
+                ability_scores[field] = 0.0
+                continue
+            correct = correct_per_cat.get(cat_id, 0)
+            ability_scores[field] = (correct / total) * 5
+
+        # -- Aggregate RIASEC answers --
+        riasec_answers = fetch_riasec_answers(user_id)
+        riasec_sums: dict = {}
+        for ans in riasec_answers:
+            cat_id = ans["category_id"]
+            riasec_sums[cat_id] = riasec_sums.get(cat_id, 0) + int(ans["answer"])
+
+        riasec_scores: dict = {}
+        for cat in riasec_categories:
+            cat_id = cat["id"]
+            code = cat["code"]
+            field = RIASEC_CODE_TO_FIELD.get(code)
+            if field is None:
+                continue
+            riasec_scores[field] = float(riasec_sums.get(cat_id, 0))
+
+        # -- Compute track percentages using existing formulas --
+        # RIASEC_MAX: max possible raw score per RIASEC category (5 questions × 5-point Likert scale)
+        RIASEC_MAX = 25
+
+        def pct_ability(v):
+            return (v / 5) * 100
+
+        def pct_riasec(v):
+            return (v / RIASEC_MAX) * 100
+
+        verbal_ability = ability_scores.get("verbal_ability", 0)
+        numerical_ability = ability_scores.get("numerical_ability", 0)
+        science_test = ability_scores.get("science_test", 0)
+        clerical_ability = ability_scores.get("clerical_ability", 0)
+        interpersonal_skills_test = ability_scores.get("interpersonal_skills_test", 0)
+        entrepreneurship_test = ability_scores.get("entrepreneurship_test", 0)
+        logical_reasoning = ability_scores.get("logical_reasoning", 0)
+        mechanical_ability = ability_scores.get("mechanical_ability", 0)
+
+        realistic = riasec_scores.get("realistic", 0)
+        investigative = riasec_scores.get("investigative", 0)
+        artistic = riasec_scores.get("artistic", 0)
+        social = riasec_scores.get("social", 0)
+        enterprising = riasec_scores.get("enterprising", 0)
+        conventional = riasec_scores.get("conventional", 0)
+
+        p_verbal = pct_ability(verbal_ability)
+        p_numerical = pct_ability(numerical_ability)
+        p_science = pct_ability(science_test)
+        p_clerical = pct_ability(clerical_ability)
+        p_interpersonal = pct_ability(interpersonal_skills_test)
+        p_entrepreneurship = pct_ability(entrepreneurship_test)
+        p_logical = pct_ability(logical_reasoning)
+        p_mechanical = pct_ability(mechanical_ability)
+
+        p_realistic = pct_riasec(realistic)
+        p_investigative = pct_riasec(investigative)
+        p_artistic = pct_riasec(artistic)
+        p_social = pct_riasec(social)
+        p_enterprising = pct_riasec(enterprising)
+        p_conventional = pct_riasec(conventional)
+
+        tvl_score = (p_realistic + p_mechanical) / 2
+        stem_score = (p_investigative + ((p_logical + p_science + p_numerical) / 3)) / 2
+        abm_part1 = (p_enterprising + p_conventional) / 2
+        abm_part2 = (p_entrepreneurship + p_clerical + p_numerical) / 3
+        abm_score = (abm_part1 + abm_part2) / 2
+        humss_score = (p_social + ((p_verbal + p_interpersonal) / 2)) / 2
+        arts_score = (p_artistic + ((p_verbal + p_interpersonal) / 2)) / 2
+        sports_score = (((p_realistic + p_social) / 2) + ((p_mechanical + p_interpersonal) / 2)) / 2
+
+        # -- Build and upsert record --
+        record = {
+            "user_id": user_id,
+            "verbal_ability": float(verbal_ability),
+            "numerical_ability": float(numerical_ability),
+            "science_test": float(science_test),
+            "clerical_ability": float(clerical_ability),
+            "interpersonal_skills_test": float(interpersonal_skills_test),
+            "logical_reasoning": float(logical_reasoning),
+            "entrepreneurship_test": float(entrepreneurship_test),
+            "mechanical_ability": float(mechanical_ability),
+            "realistic": float(realistic),
+            "investigative": float(investigative),
+            "artistic": float(artistic),
+            "social": float(social),
+            "enterprising": float(enterprising),
+            "conventional": float(conventional),
+            "TVL": float(tvl_score),
+            "STEM": float(stem_score),
+            "ABM": float(abm_score),
+            "HUMSS": float(humss_score),
+            "Arts": float(arts_score),
+            "Sports": float(sports_score),
+        }
+
+        try:
+            upsert_student_submission(record, conflict_column="user_id")
+        except Exception as upsert_err:
+            raise RuntimeError(f"Failed to upsert student_submission for user_id={user_id}: {upsert_err}") from upsert_err
+
+        return {"message": "Computed and upserted successfully", "result": record}
+    except Exception as e:
+        return {"error": str(e), "type": type(e).__name__}
+
+
+@app.get("/user-result/{user_id}")
+def get_user_result_endpoint(user_id: str):
+    """Fetch the student_submission record for a given user_id."""
+    try:
+        result = get_user_result(user_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"No result found for user_id: {user_id}")
+        return {"result": result}
+    except HTTPException:
+        raise
     except Exception as e:
         return {"error": str(e), "type": type(e).__name__}

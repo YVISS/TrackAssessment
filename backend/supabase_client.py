@@ -115,6 +115,7 @@ def upsert_student_submission(data: dict, conflict_column: str = "id"):
     # Only keep columns that exist in the student_submission table schema
     allowed_columns = {
         "id",
+        "user_id",
         "submitted_at",
         "name",
         "verbal_ability",
@@ -344,3 +345,64 @@ def get_top_3_from_predictions():
         "top_3_grades": top_3,
         "most_suited_track": track
     }
+
+
+def fetch_msa_categories():
+    """Fetch all MSA categories (id, code) from msa_categories table."""
+    url = f"{SUPABASE_URL}/rest/v1/msa_categories?select=id,code"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code != 200:
+        print(f"Supabase Error: {response.status_code} - {response.text}")
+        response.raise_for_status()
+    return response.json()
+
+
+def fetch_msa_questions():
+    """Fetch all MSA questions (category_id, question_number, right_answer) from msa_questions table."""
+    url = f"{SUPABASE_URL}/rest/v1/msa_questions?select=category_id,question_number,right_answer"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code != 200:
+        print(f"Supabase Error: {response.status_code} - {response.text}")
+        response.raise_for_status()
+    return response.json()
+
+
+def fetch_msa_answers(user_id: str):
+    """Fetch all MSA answers for a user from msa_answers table."""
+    url = f"{SUPABASE_URL}/rest/v1/msa_answers?user_id=eq.{user_id}&select=category_id,question_number,answer"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code != 200:
+        print(f"Supabase Error: {response.status_code} - {response.text}")
+        response.raise_for_status()
+    return response.json()
+
+
+def fetch_riasec_categories():
+    """Fetch all RIASEC categories (id, code) from riasec_categories table."""
+    url = f"{SUPABASE_URL}/rest/v1/riasec_categories?select=id,code"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code != 200:
+        print(f"Supabase Error: {response.status_code} - {response.text}")
+        response.raise_for_status()
+    return response.json()
+
+
+def fetch_riasec_answers(user_id: str):
+    """Fetch all RIASEC answers for a user from riasec_answers table."""
+    url = f"{SUPABASE_URL}/rest/v1/riasec_answers?user_id=eq.{user_id}&select=category_id,question_number,answer"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code != 200:
+        print(f"Supabase Error: {response.status_code} - {response.text}")
+        response.raise_for_status()
+    return response.json()
+
+
+def get_user_result(user_id: str):
+    """Fetch the student_submission record for a given user_id."""
+    url = f"{SUPABASE_URL}/rest/v1/student_submission?user_id=eq.{user_id}"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code != 200:
+        print(f"Supabase Error: {response.status_code} - {response.text}")
+        response.raise_for_status()
+    rows = response.json()
+    return rows[0] if rows else None
