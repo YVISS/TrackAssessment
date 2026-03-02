@@ -422,3 +422,14 @@ def get_user_result(user_id: str):
         response.raise_for_status()
     rows = response.json()
     return rows[0] if rows else None
+
+
+def get_latest_student_submission(user_id: str):
+    """Fetch the most recent student_submission record for a user."""
+    url = f"{SUPABASE_URL}/rest/v1/student_submission?user_id=eq.{user_id}&order=submitted_at.desc&limit=1"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code != 200:
+        print(f"Supabase Error: {response.status_code} - {response.text}")
+        return None
+    data = response.json()
+    return data[0] if data else None
