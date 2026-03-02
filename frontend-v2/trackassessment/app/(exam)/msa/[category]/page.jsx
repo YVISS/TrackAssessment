@@ -177,12 +177,30 @@ export default function MsaPage() {
 
       if (error) throw error;
 
+      // If this is the last MSA category, trigger backend scoring
+      const currentIndex = allCategories.findIndex((c) => c.id === category.id);
+      const isLastCategory = currentIndex === allCategories.length - 1;
+
+      if (isLastCategory) {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+        const res = await fetch(`${backendUrl}/compute-from-supabase`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: user.id }),
+        });
+        if (!res.ok) {
+          const detail = await res.text().catch(() => "");
+          console.error("compute-from-supabase failed:", res.status, detail);
+          throw new Error(`Scoring failed (HTTP ${res.status}). Please try again or contact support.`);
+        }
+      }
+
       toast.success("Answers submitted successfully!");
       goToNextCategory();
     } catch (err) {
       console.error(err);
-      setErrorMsg("Submit failed. Please try again.");
-      toast.error("Submit failed. Please try again.");
+      setErrorMsg(err.message || "Submit failed. Please try again.");
+      toast.error(err.message || "Submit failed. Please try again.");
     } finally {
       setSubmitting(false);
     }
