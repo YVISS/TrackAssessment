@@ -29,9 +29,10 @@ MANIFEST
 .coverage
 htmlcov/
 
-# Environment variables
+# Environment variables — never commit secrets
 .env
 .env.local
+.env.*.local
 
 # IDE / Editor
 .vscode/
