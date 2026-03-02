@@ -1,8 +1,10 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import joblib
 import threading
 import time
+import os
 
 from routers.predict import router as rule_predict_router, compute_group_options
 from careers_mapping import STRAND_CAREERS, GROUP_CAREERS
@@ -27,6 +29,17 @@ from supabase_client import (
 
 app = FastAPI()
 app.include_router(rule_predict_router)
+
+# CORS — allow the frontend dev server and any origins configured via env
+_extra_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+_cors_origins = ["http://localhost:3000", "http://127.0.0.1:3000"] + _extra_origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 model = joblib.load("model/track_recommender.pkl")
 
