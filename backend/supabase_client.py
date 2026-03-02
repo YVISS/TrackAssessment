@@ -298,52 +298,68 @@ def update_prediction(prediction_id: str, data: dict):
     return response.json() if response.text else {}
 
 def get_top_3_from_predictions():
-    """Get top 3 highest average grades from predictions table"""
-    predictions = get_all_predictions()
-   
-    if not predictions:
-        return {"error": "No predictions found"}
-   
-    # Fields to analyze
-    fields = [
+    """Get top 3 highest average grades from student_submission table"""
+    submissions = get_all_results()
+
+    if not submissions:
+        return {"error": "No submissions found"}
+
+    # MSA ability fields (out of 5)
+    msa_fields = [
+        'verbal_ability',
         'numerical_ability',
+        'science_test',
         'clerical_ability',
         'interpersonal_skills_test',
+        'logical_reasoning',
+        'entrepreneurship_test',
         'mechanical_ability',
-        'va_et',
-        'st_lr'
     ]
-   
-    # Calculate averages
-    averages = {}
-    for field in fields:
-        values = [float(row.get(field, 0)) for row in predictions if row.get(field) is not None]
-        if values:
-            averages[field] = sum(values) / len(values)
-        else:
-            averages[field] = 0
-   
-    # Sort by average descending
-    sorted_averages = sorted(averages.items(), key=lambda x: x[1], reverse=True)
-    top_3 = sorted_averages[:3]
-   
-    # Determine most suited track based on top 3
-    top_fields = [field for field, score in top_3]
-   
-    if 'st_lr' in top_fields and 'va_et' in top_fields:
-        track = "STEM"
-    elif 'numerical_ability' in top_fields and 'mechanical_ability' in top_fields:
-        track = "Industrial Technology"
-    elif 'clerical_ability' in top_fields and 'interpersonal_skills_test' in top_fields:
-        track = "Business Administration"
-    else:
-        track = "General"
-   
+
+    # RIASEC score fields (out of 25)
+    riasec_fields = [
+        'realistic',
+        'investigative',
+        'artistic',
+        'social',
+        'enterprising',
+        'conventional',
+    ]
+
+    # Track score fields (out of 100)
+    track_fields = ['TVL', 'STEM', 'ABM', 'HUMSS', 'Arts', 'Sports']
+
+    def calc_averages(fields):
+        averages = {}
+        for field in fields:
+            values = [float(row.get(field)) for row in submissions if row.get(field) is not None]
+            averages[field] = sum(values) / len(values) if values else 0
+        return averages
+
+    msa_averages = calc_averages(msa_fields)
+    riasec_averages = calc_averages(riasec_fields)
+    track_averages = calc_averages(track_fields)
+
+    # Top 3 tracks by average score
+    sorted_tracks = sorted(track_averages.items(), key=lambda x: x[1], reverse=True)
+    top_3_tracks = sorted_tracks[:3]
+
+    # Top 3 MSA abilities by average score
+    sorted_msa = sorted(msa_averages.items(), key=lambda x: x[1], reverse=True)
+    top_3_msa = sorted_msa[:3]
+
+    # Top 3 RIASEC scores by average
+    sorted_riasec = sorted(riasec_averages.items(), key=lambda x: x[1], reverse=True)
+    top_3_riasec = sorted_riasec[:3]
+
     return {
-        "total_predictions": len(predictions),
-        "average_scores": averages,
-        "top_3_grades": top_3,
-        "most_suited_track": track
+        "total_submissions": len(submissions),
+        "msa_averages": msa_averages,
+        "riasec_averages": riasec_averages,
+        "track_averages": track_averages,
+        "top_3_tracks": top_3_tracks,
+        "top_3_msa": top_3_msa,
+        "top_3_riasec": top_3_riasec,
     }
 
 
