@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Verbal Ability Questions</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Arial;max-width:900px;margin:32px auto;padding:0 16px;color:#0f172a}
+    h1{font-size:1.6rem;margin-bottom:8px}
+    #status{color:#2563eb;margin-bottom:12px}
+    li{margin:18px 0;padding:12px;border-radius:8px;background:#f8fafc}
+    ol{margin:6px 0 0;padding-left:18px}
+  </style>
+</head>
+<body>
+  <h1>Verbal Ability — Questions</h1>
+  <div id="status" style="display:none">Initializing…</div>
+
+  <!-- Simple login screen shown first -->
+  <div id="login-area" style="max-width:420px;margin:12px 0;padding:12px;border-radius:8px;background:#f8fafc">
+    <h2 style="margin:0 0 8px">Sign In</h2>
+    <p style="margin:0 0 8px;color:#334155">Enter your name or email to continue (client-only).</p>
+    <input id="login-input" placeholder="Name or email" style="width:100%;padding:8px;margin-bottom:8px;border:1px solid #e2e8f0;border-radius:6px" />
+    <div style="display:flex;gap:8px">
+      <button id="login-btn" style="padding:8px 12px;background:#2563eb;color:#fff;border:none;border-radius:6px">Continue</button>
+      <button id="skip-btn" style="padding:8px 12px;background:#e2e8f0;border:none;border-radius:6px">Browse questions</button>
+    </div>
+  </div>
+
+  <ul id="questions" style="display:none"></ul>
+
+  <script>
+    // Use backend proxy endpoint to fetch questions. Default to local backend.
+    const BACKEND_URL = "http://127.0.0.1:8000";
+
+    function escapeHtml(s){ if(s==null) return ''; return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+
+    async function loadQuestions(){
+      const status = document.getElementById('status');
+
+      try{
+        status.style.display = '';
+        status.textContent = 'Fetching questions from backend…';
+        const url = `${BACKEND_URL}/verbal-questions`;
+
+        const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`${res.status} ${res.statusText} - ${text}`);
+        }
+
+        const rows = await res.json();
+        if (rows && rows.error) {
+          throw new Error(rows.error + (rows.detail ? ` - ${rows.detail}` : ''));
+        }
+        const data = Array.isArray(rows) ? rows : (rows.value || rows);
+        status.textContent = `Loaded ${data.length} question(s)`;
+
+        const ul = document.getElementById('questions');
+        ul.style.display = '';
+        ul.innerHTML = '';
+        data.forEach(r => {
+          const li = document.createElement('li');
+          li.innerHTML = `
+            <div><strong>${escapeHtml(r.question_id)}. ${escapeHtml(r.question)}</strong></div>
+            <ol type="A">
+              <li>${escapeHtml(r.A)}</li>
+              <li>${escapeHtml(r.B)}</li>
+              <li>${escapeHtml(r.C)}</li>
+              <li>${escapeHtml(r.D)}</li>
+            </ol>
+            `;
+          ul.appendChild(li);
+        });
+
+      }catch(err){
+        console.error(err);
+        document.getElementById('status').textContent = 'Error: ' + err.message;
+      }
+    }
+
+    // Wire login button to show questions
+    document.getElementById('login-btn').addEventListener('click', () => {
+      const name = document.getElementById('login-input').value.trim();
+      if (!name) {
+        alert('Please enter your name or email to continue.');
+        return;
+      }
+      // store in session (optional)
+      sessionStorage.setItem('user_name', name);
+      document.getElementById('login-area').style.display = 'none';
+      // show status area
+      document.getElementById('status').style.display = '';
+      document.getElementById('status').textContent = `Welcome, ${name}`;
+      loadQuestions();
+    });
+
+    // Allow skipping login (for quick browsing)
+    document.getElementById('skip-btn').addEventListener('click', () => {
+      document.getElementById('login-area').style.display = 'none';
+      loadQuestions();
+    });
+  </script>
+</body>
+</html>

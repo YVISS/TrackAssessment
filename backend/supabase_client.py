@@ -126,12 +126,7 @@ def upsert_student_submission(data: dict, conflict_column: str = "id"):
         "entrepreneurship_test",
         "mechanical_ability",
         "logical_reasoning",
-        "realistic",
-        "investigative",
-        "artistic",
-        "social",
-        "enterprising",
-        "conventional",
+        
         "TVL",
         "STEM",
         "ABM",
@@ -187,27 +182,9 @@ def insert_result(data: dict):
     entrepreneurship_test = float(data.get("entrepreneurship_test", 0))
     mechanical_ability = float(data.get("mechanical_ability", 0))
 
-    # RIASEC raw scores (derive if not provided)
-    realistic = float(data.get("realistic", mechanical_ability * 5))
-    investigative = float(data.get("investigative", ((science_test + logical_reasoning) / 2) * 5))
-    artistic = float(data.get("artistic", verbal_ability * 5))
-    social = float(data.get("social", interpersonal_skills_test * 5))
-    enterprising = float(data.get("enterprising", entrepreneurship_test * 5))
-    conventional = float(data.get("conventional", clerical_ability * 5))
-
-    # Helpers: convert to percentage
-    def pct_riasec(v):
-        return (v / 25) * 100
-
+    # Helpers: convert ability scores (0-5) to percentage (0-100)
     def pct_ability(v):
         return (v / 5) * 100
-
-    p_realistic = pct_riasec(realistic)
-    p_investigative = pct_riasec(investigative)
-    p_artistic = pct_riasec(artistic)
-    p_social = pct_riasec(social)
-    p_enterprising = pct_riasec(enterprising)
-    p_conventional = pct_riasec(conventional)
 
     p_logical = pct_ability(logical_reasoning)
     p_science = pct_ability(science_test)
@@ -218,17 +195,15 @@ def insert_result(data: dict):
     p_interpersonal = pct_ability(interpersonal_skills_test)
     p_mechanical = pct_ability(mechanical_ability)
 
-    # Compute track scores per provided formulas
-    tvl_score = (p_realistic + p_mechanical) / 2
-    stem_score = (p_investigative + ((p_logical + p_science + p_numerical) / 3)) / 2
-    abm_part1 = (p_enterprising + p_conventional) / 2
-    abm_part2 = (p_entrepreneurship + p_clerical + p_numerical) / 3
-    abm_score = (abm_part1 + abm_part2) / 2
-    humss_score = (p_social + ((p_verbal + p_interpersonal) / 2)) / 2
-    arts_score = (p_artistic + ((p_verbal + p_interpersonal) / 2)) / 2
-    sports_score = (((p_realistic + p_social) / 2) + ((p_mechanical + p_interpersonal) / 2)) / 2
+    # Compute simplified track scores without RIASEC-derived inputs
+    tvl_score = p_mechanical
+    stem_score = (p_logical + p_science + p_numerical) / 3
+    abm_score = (p_entrepreneurship + p_clerical + p_numerical) / 3
+    humss_score = (p_verbal + p_interpersonal) / 2
+    arts_score = (p_verbal + p_interpersonal) / 2
+    sports_score = (p_mechanical + p_interpersonal) / 2
 
-    # Build the student_submission record
+    # Build the student_submission record (no RIASEC fields)
     student_record = {
         "verbal_ability": float(verbal_ability),
         "numerical_ability": float(numerical_ability),
@@ -238,12 +213,6 @@ def insert_result(data: dict):
         "logical_reasoning": float(logical_reasoning),
         "entrepreneurship_test": float(entrepreneurship_test),
         "mechanical_ability": float(mechanical_ability),
-        "realistic": float(realistic),
-        "investigative": float(investigative),
-        "artistic": float(artistic),
-        "social": float(social),
-        "enterprising": float(enterprising),
-        "conventional": float(conventional),
         "TVL": float(tvl_score),
         "STEM": float(stem_score),
         "ABM": float(abm_score),
@@ -316,15 +285,6 @@ def get_top_3_from_predictions():
         'mechanical_ability',
     ]
 
-    # RIASEC score fields (out of 25)
-    riasec_fields = [
-        'realistic',
-        'investigative',
-        'artistic',
-        'social',
-        'enterprising',
-        'conventional',
-    ]
 
     # Track score fields (out of 100)
     track_fields = ['TVL', 'STEM', 'ABM', 'HUMSS', 'Arts', 'Sports']
@@ -337,7 +297,6 @@ def get_top_3_from_predictions():
         return averages
 
     msa_averages = calc_averages(msa_fields)
-    riasec_averages = calc_averages(riasec_fields)
     track_averages = calc_averages(track_fields)
 
     # Top 3 tracks by average score
@@ -348,18 +307,12 @@ def get_top_3_from_predictions():
     sorted_msa = sorted(msa_averages.items(), key=lambda x: x[1], reverse=True)
     top_3_msa = sorted_msa[:3]
 
-    # Top 3 RIASEC scores by average
-    sorted_riasec = sorted(riasec_averages.items(), key=lambda x: x[1], reverse=True)
-    top_3_riasec = sorted_riasec[:3]
-
     return {
         "total_submissions": len(submissions),
         "msa_averages": msa_averages,
-        "riasec_averages": riasec_averages,
         "track_averages": track_averages,
         "top_3_tracks": top_3_tracks,
         "top_3_msa": top_3_msa,
-        "top_3_riasec": top_3_riasec,
     }
 
 
@@ -392,25 +345,6 @@ def fetch_msa_answers(user_id: str):
         response.raise_for_status()
     return response.json()
 
-
-def fetch_riasec_categories():
-    """Fetch all RIASEC categories (id, code) from riasec_categories table."""
-    url = f"{SUPABASE_URL}/rest/v1/riasec_categories?select=id,code"
-    response = requests.get(url, headers=HEADERS)
-    if response.status_code != 200:
-        print(f"Supabase Error: {response.status_code} - {response.text}")
-        response.raise_for_status()
-    return response.json()
-
-
-def fetch_riasec_answers(user_id: str):
-    """Fetch all RIASEC answers for a user from riasec_answers table."""
-    url = f"{SUPABASE_URL}/rest/v1/riasec_answers?user_id=eq.{user_id}&select=category_id,question_number,answer"
-    response = requests.get(url, headers=HEADERS)
-    if response.status_code != 200:
-        print(f"Supabase Error: {response.status_code} - {response.text}")
-        response.raise_for_status()
-    return response.json()
 
 
 def get_user_result(user_id: str):

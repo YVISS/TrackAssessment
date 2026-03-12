@@ -1,17 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "../../../utils/supabase/client";
-import RiasecRadarChart from "./RiasecRadarChart";
-
-// Label maps for RIASEC categories and MSA abilities
-const RIASEC_LABELS = {
-  realistic: "Realistic",
-  investigative: "Investigative",
-  artistic: "Artistic",
-  social: "Social",
-  enterprising: "Enterprising",
-  conventional: "Conventional",
-};
+// RIASEC removed: radar chart and labels omitted
 
 const MSA_LABELS = {
   verbal_ability: "Verbal Ability",
@@ -30,11 +20,7 @@ const TRACK_COLORS = [
   "bg-blue-400",
   "bg-blue-300",
 ];
-const RIASEC_COLORS = [
-  "bg-purple-500",
-  "bg-purple-400",
-  "bg-purple-300",
-];
+// Color palettes for MSA/Tracks
 const MSA_COLORS = [
   "bg-emerald-500",
   "bg-emerald-400",
@@ -137,17 +123,15 @@ function TopThreeCard({ title, icon, items, labelMap, colors, barMax }) {
 
 /**
  * DashboardContent fetches the authenticated user's latest assessment result
- * from the backend `/student-result/{user_id}` endpoint and renders the three
- * top-3 cards: Tracks, RIASEC, and MSA, along with the RIASEC Radar Chart.
+ * from the backend `/student-result/{user_id}` endpoint and renders the
+ * top cards: Tracks and MSA.
  */
 export default function DashboardContent() {
   const supabase = useMemo(() => createClient(), []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [topTracks, setTopTracks] = useState([]);
-  const [topRiasec, setTopRiasec] = useState([]);
   const [topMsa, setTopMsa] = useState([]);
-  const [personalRiasecScores, setPersonalRiasecScores] = useState(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -191,20 +175,6 @@ export default function DashboardContent() {
           );
         }
 
-        // Extract RIASEC scores
-        if (data.realistic !== undefined) {
-          const riasecScores = {
-            realistic: data.realistic,
-            investigative: data.investigative,
-            artistic: data.artistic,
-            social: data.social,
-            enterprising: data.enterprising,
-            conventional: data.conventional,
-          };
-          setPersonalRiasecScores(riasecScores);
-          setTopRiasec(getTopN(riasecScores, 3));
-        }
-
         // Extract MSA scores
         const msaScores = Object.fromEntries(
           Object.entries({
@@ -243,15 +213,7 @@ export default function DashboardContent() {
     </svg>
   );
 
-  const RiasecIcon = (
-    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-      strokeLinejoin="round" className="text-purple-400">
-      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-      <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0 -18" />
-      <path d="M12 9v4l2 2" />
-    </svg>
-  );
+  // RIASEC UI removed — placeholder kept for layout compatibility
 
   const MsaIcon = (
     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"
@@ -307,15 +269,7 @@ export default function DashboardContent() {
           barMax={100}
         />
 
-        {/* Top 3 RIASEC Scores */}
-        <TopThreeCard
-          title="Top 3 RIASEC"
-          icon={RiasecIcon}
-          items={topRiasec}
-          labelMap={RIASEC_LABELS}
-          colors={RIASEC_COLORS}
-          barMax={25}
-        />
+        {/* Top 3 RIASEC removed */}
 
         {/* Top 3 MSA Scores */}
         <TopThreeCard
@@ -328,8 +282,7 @@ export default function DashboardContent() {
         />
       </div>
 
-      {/* RIASEC Radar Chart – full 6-dimension interest profile */}
-      <RiasecRadarChart riasecScores={personalRiasecScores} />
+      {/* RIASEC chart removed */}
     </div>
   );
 }
