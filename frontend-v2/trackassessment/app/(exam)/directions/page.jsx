@@ -11,7 +11,7 @@ export default function Page() {
   const redirectToTest = () => {
     setIsStarting(true);
     toast.info("Starting the assessment...");
-    router.replace("/riasec2/VA");
+    router.replace("/msa/VA");
   };
 
   const handleCheckboxChange = (event) => {

@@ -7,7 +7,7 @@ import time
 import os
 
 from routers.predict import router as rule_predict_router, compute_group_options
-from careers_mapping import STRAND_CAREERS, GROUP_CAREERS
+from careers_mapping import GROUP_CAREERS
 from supabase_client import (
     insert_prediction,
     upsert_prediction,
@@ -17,16 +17,15 @@ from supabase_client import (
     get_all_predictions,
     get_top_3_from_predictions,
     generate_result_id,
-    normalize_strand,
     update_prediction,
     fetch_msa_categories,
     fetch_msa_questions,
     fetch_msa_answers,
-    fetch_riasec_categories,
-    fetch_riasec_answers,
     get_user_result,
     get_latest_student_submission,
 )
+import requests
+from urllib.parse import quote
 
 app = FastAPI()
 app.include_router(rule_predict_router)
@@ -42,7 +41,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-model = joblib.load("model/track_recommender.pkl")
+model = None
+try:
+    model = joblib.load("model/track_recommender.pkl")
+except FileNotFoundError:
+    print("Warning: model/track_recommender.pkl not found — continuing without RF model.")
+except Exception as e:
+    print(f"Warning: failed loading model: {e} — continuing without RF model.")
 
 # Feature columns for the Random Forest model (must match training order)
 MODEL_FEATURES = [
@@ -66,17 +71,13 @@ class StudentData(BaseModel):
     logical_reasoning: int
     entrepreneurship_test: int
     mechanical_ability: int
-    realistic: int = 0
-    investigative: int = 0
-    artistic: int = 0
-    social: int = 0
-    enterprising: int = 0
-    conventional: int = 0
 
 
 def get_model_prediction(data: "StudentData"):
     """Get prediction from Random Forest model"""
     try:
+        if model is None:
+            return None, None
         # Prepare features in the correct order
         features = [[
             data.verbal_ability,
@@ -88,11 +89,10 @@ def get_model_prediction(data: "StudentData"):
             data.entrepreneurship_test,
             data.mechanical_ability
         ]]
-       
-        # Get prediction from model
+        
         prediction = model.predict(features)[0]
        
-        # If model returns probabilities, get the class with highest probability
+
         if hasattr(model, 'predict_proba'):
             proba = model.predict_proba(features)[0]
             confidence = max(proba) * 100
@@ -103,164 +103,10 @@ def get_model_prediction(data: "StudentData"):
         print(f"Model prediction error: {e}")
         return None, None
 
-# RIASEC Interest Mappings (assuming raw scores out of 25)
-RIASEC_MAPPING = {
-    "Realistic": "mechanical_ability",
-    "Investigative": "st_lr",  # (science_test + logical_reasoning) / 2
-    "Artistic": "verbal_ability",
-    "Social": "interpersonal_skills_test",
-    "Enterprising": "entrepreneurship_test",
-    "Conventional": "clerical_ability"
-}
-
-# MSA Ability Mappings (assuming raw scores out of 5)
-MSA_MAPPING = {
-    "Logical": "logical_reasoning",
-    "Science": "science_test",
-    "Numerical": "numerical_ability",
-    "Entrepreneurship": "entrepreneurship_test",
-    "Clerical": "clerical_ability",
-    "Verbal": "verbal_ability",
-    "Interpersonal": "interpersonal_skills_test",
-    "Creative": "verbal_ability",  # Assuming creative is verbal
-    "Mechanical": "mechanical_ability",
-    "Physical": "mechanical_ability"  # Assuming physical is mechanical
-}
-
-# Track Mappings
-TRACK_MAPPING = {
-    "TVL": {"interest": "Realistic", "abilities": ["Mechanical"]},
-    "STEM": {"interest": "Investigative", "abilities": ["Logical", "Science", "Numerical"]},
-    "ABM": {"interest": "Enterprising", "abilities": ["Entrepreneurship", "Clerical", "Numerical"]},
-    "HUMSS": {"interest": "Social", "abilities": ["Verbal", "Interpersonal"]},
-    "Arts": {"interest": "Artistic", "abilities": ["Creative"]},
-    "Sports": {"interest": "Realistic", "abilities": ["Physical", "Mechanical"]}
-}
-
-def compute_track_score(data, track):
-    """Compute track score using combined RIASEC and ability formulas.
-
-    Returns a percentage (0-100) according to the formulas provided by the user.
-    """
-    # Derive RIASEC scores if not present (predict endpoint derives them by multiplying by 5)
-    realistic = getattr(data, "realistic", None)
-    investigative = getattr(data, "investigative", None)
-    artistic = getattr(data, "artistic", None)
-    social = getattr(data, "social", None)
-    enterprising = getattr(data, "enterprising", None)
-    conventional = getattr(data, "conventional", None)
-
-    if realistic is None:
-        realistic = data.mechanical_ability * 5
-    if investigative is None:
-        investigative = ((data.science_test + data.logical_reasoning) / 2) * 5
-    if artistic is None:
-        artistic = data.verbal_ability * 5
-    if social is None:
-        social = data.interpersonal_skills_test * 5
-    if enterprising is None:
-        enterprising = data.entrepreneurship_test * 5
-    if conventional is None:
-        conventional = data.clerical_ability * 5
-
-    # Ability raw values (out of 5)
-    logical = getattr(data, "logical_reasoning", 0)
-    science = getattr(data, "science_test", 0)
-    numerical = getattr(data, "numerical_ability", 0)
-    entrepreneurship = getattr(data, "entrepreneurship_test", 0)
-    clerical = getattr(data, "clerical_ability", 0)
-    verbal = getattr(data, "verbal_ability", 0)
-    interpersonal = getattr(data, "interpersonal_skills_test", 0)
-    mechanical = getattr(data, "mechanical_ability", 0)
-
-    # Normalize to percentages
-    def pct_from_riasec(value):
-        return (value / 25) * 100
-
-    def pct_from_ability(value):
-        return (value / 5) * 100
-
-    p_realistic = pct_from_riasec(realistic)
-    p_investigative = pct_from_riasec(investigative)
-    p_artistic = pct_from_riasec(artistic)
-    p_social = pct_from_riasec(social)
-    p_enterprising = pct_from_riasec(enterprising)
-    p_conventional = pct_from_riasec(conventional)
-
-    p_logical = pct_from_ability(logical)
-    p_science = pct_from_ability(science)
-    p_numerical = pct_from_ability(numerical)
-    p_entrepreneurship = pct_from_ability(entrepreneurship)
-    p_clerical = pct_from_ability(clerical)
-    p_verbal = pct_from_ability(verbal)
-    p_interpersonal = pct_from_ability(interpersonal)
-    p_mechanical = pct_from_ability(mechanical)
-
-    # Apply user-defined formulas
-    if track == "TVL":
-        score = (p_realistic + p_mechanical) / 2
-    elif track == "STEM":
-        score = (p_investigative + ((p_logical + p_science + p_numerical) / 3)) / 2
-    elif track == "ABM":
-        part1 = (p_enterprising + p_conventional) / 2
-        part2 = (p_entrepreneurship + p_clerical + p_numerical) / 3
-        score = (part1 + part2) / 2
-    elif track == "HUMSS":
-        score = (p_social + ((p_verbal + p_interpersonal) / 2)) / 2
-    elif track == "Arts":
-        score = (p_artistic + ((p_verbal + p_interpersonal) / 2)) / 2
-    elif track == "Sports":
-        score = (((p_realistic + p_social) / 2) + ((p_mechanical + p_interpersonal) / 2)) / 2
-    else:
-        score = 0
-
-    return score
+# Track-related computation removed per user request.
+# Track-related constants and compute functions were intentionally removed.
 
 SYNC_INTERVAL_SECONDS = 5
-
-
-def get_track_from_strand(strand):
-    """Map strand to track"""
-    normalized = normalize_strand(strand)
-    academic_strands = ["STEM", "ABM", "HUMSS", "GAS"]
-
-    if normalized in academic_strands:
-        return "ACADEMIC TRACK"
-    if normalized == "ARTS AND DESIGN":
-        return "ARTS AND DESIGN TRACK"
-    if normalized == "SPORTS":
-        return "SPORTS TRACK"
-    if normalized in ["TVL", "IA", "ICT", "HE", "AFA"]:
-        return "TECHNICAL VOCATIONAL-LIVELIHOOD (TVL) TRACK"
-    return "UNKNOWN TRACK"
-
-
-def get_top_3_grades_and_track(scores):
-    """Identify top 3 highest grades and determine most suited track."""
-    fields = [
-        "numerical_ability",
-        "clerical_ability",
-        "interpersonal_skills_test",
-        "mechanical_ability",
-    ]
-
-    field_scores = [(field, scores[field]) for field in fields]
-    field_scores.sort(key=lambda x: x[1], reverse=True)
-    top_3 = field_scores[:3]
-
-    top_fields = [field for field, _score in top_3]
-
-    if "numerical_ability" in top_fields and "mechanical_ability" in top_fields:
-        track = "Industrial Technology"
-    elif "clerical_ability" in top_fields and "interpersonal_skills_test" in top_fields:
-        track = "Business Administration"
-    else:
-        track = "General"
-
-    return {
-        "top_3_grades": top_3,
-        "predicted_track": track,
-    }
 
 
 def sync_predictions_from_results():
@@ -281,15 +127,7 @@ def sync_predictions_from_results():
             entrepreneurship_test = int(row.get("EntrepreneurshipTest", 0))
             mechanical_ability = int(row.get("MechanicalAbility", 0))
 
-            # RIASEC scores (out of 25)
-            realistic = int(row.get("Realistic", 0))
-            investigative = int(row.get("Investigative", 0))
-            artistic = int(row.get("Artistic", 0))
-            social = int(row.get("Social", 0))
-            enterprising = int(row.get("Enterprising", 0))
-            conventional = int(row.get("Conventional", 0))
-
-            # Calculate derived scores
+            # Calculate derived scores required by group computation
             va_et = (verbal_ability + entrepreneurship_test) / 2
             st_lr = (science_test + logical_reasoning) / 2
 
@@ -306,53 +144,9 @@ def sync_predictions_from_results():
             group_codes = group_result.get("groups", [])
             group_value = ", ".join(group_codes) if group_codes else None
 
-            # Normalize to percentages
-            def pct_riasec(v):
-                return (v / 25) * 100
-
-            def pct_ability(v):
-                return (v / 5) * 100
-
-            p_realistic = pct_riasec(realistic)
-            p_investigative = pct_riasec(investigative)
-            p_artistic = pct_riasec(artistic)
-            p_social = pct_riasec(social)
-            p_enterprising = pct_riasec(enterprising)
-            p_conventional = pct_riasec(conventional)
-
-            p_logical = pct_ability(logical_reasoning)
-            p_science = pct_ability(science_test)
-            p_numerical = pct_ability(numerical_ability)
-            p_entrepreneurship = pct_ability(entrepreneurship_test)
-            p_clerical = pct_ability(clerical_ability)
-            p_verbal = pct_ability(verbal_ability)
-            p_interpersonal = pct_ability(interpersonal_skills_test)
-            p_mechanical = pct_ability(mechanical_ability)
-
-            # Compute track scores per provided formulas
-            tvl_score = (p_realistic + p_mechanical) / 2
-            stem_score = (p_investigative + ((p_logical + p_science + p_numerical) / 3)) / 2
-            abm_part1 = (p_enterprising + p_conventional) / 2
-            abm_part2 = (p_entrepreneurship + p_clerical + p_numerical) / 3
-            abm_score = (abm_part1 + abm_part2) / 2
-            humss_score = (p_social + ((p_verbal + p_interpersonal) / 2)) / 2
-            arts_score = (p_artistic + ((p_verbal + p_interpersonal) / 2)) / 2
-            sports_score = (((p_realistic + p_social) / 2) + ((p_mechanical + p_interpersonal) / 2)) / 2
-
-            track_scores = {
-                "TVL": tvl_score,
-                "STEM": stem_score,
-                "ABM": abm_score,
-                "HUMSS": humss_score,
-                "Arts": arts_score,
-                "Sports": sports_score,
-            }
-
-            top_track = max(track_scores, key=track_scores.get)
-            normalized_prediction = normalize_strand(top_track)
             career_value = ", ".join([career for group in group_codes for career in GROUP_CAREERS.get(group, [])]) if group_codes else None
 
-            # Build record matching student_submission schema (no Strand/track/id)
+            # Build record matching student_submission schema (no Strand/track fields)
             record = {
                 "group": group_value,
                 "verbal_ability": float(verbal_ability),
@@ -363,20 +157,6 @@ def sync_predictions_from_results():
                 "logical_reasoning": float(logical_reasoning),
                 "entrepreneurship_test": float(entrepreneurship_test),
                 "mechanical_ability": float(mechanical_ability),
-                # Add RIASEC scores
-                "realistic": float(realistic),
-                "investigative": float(investigative),
-                "artistic": float(artistic),
-                "social": float(social),
-                "enterprising": float(enterprising),
-                "conventional": float(conventional),
-                # Track percentage fields
-                "TVL": float(tvl_score),
-                "STEM": float(stem_score),
-                "ABM": float(abm_score),
-                "HUMSS": float(humss_score),
-                "Arts": float(arts_score),
-                "Sports": float(sports_score),
             }
 
             upsert_student_submission(record)
@@ -452,8 +232,6 @@ def recompute_predictions():
                 group_codes = group_result.get("groups", [])
                 group_value = ", ".join(group_codes) if group_codes else None
 
-                strand_value = normalize_strand(row.get("Strand"))
-                track_value = get_track_from_strand(strand_value)
                 career_value = ", ".join([
                     career for group in group_codes for career in GROUP_CAREERS.get(group, [])
                 ]) if group_codes else None
@@ -461,8 +239,6 @@ def recompute_predictions():
                 update_prediction(
                     prediction_id,
                     {
-                        "Strand": strand_value,
-                        "track": track_value,
                         "group": group_value,
                         "career": career_value,
                     },
@@ -528,35 +304,13 @@ def predict_track(data: StudentData):
             "interpersonal_skills_test": data.interpersonal_skills_test,
             "mechanical_ability": data.mechanical_ability,
         }
-
-        rule_result = get_top_3_grades_and_track(scores)
-        normalized_prediction = normalize_strand(rule_result["predicted_track"])
-
+        # Compute group-based mapping
         group_result = compute_group_options(scores, threshold=85)
         group_codes = group_result.get("groups", [])
         group_value = ", ".join(group_codes) if group_codes else None
 
-        # Compute track scores using RIASEC and MSA percentages
-        track_scores = {}
-        for track in TRACK_MAPPING.keys():
-            track_scores[track] = compute_track_score(data, track)
-
-        # Get Random Forest model prediction
+        # Get Random Forest model prediction (kept for compatibility)
         rf_prediction, rf_confidence = get_model_prediction(data)
-
-        # Select the track with the highest score
-        ml_prediction = max(track_scores, key=track_scores.get)
-
-        # Use ml_prediction for the record
-        normalized_prediction = normalize_strand(ml_prediction)
-
-        # Calculate RIASEC scores (assuming MSA scores out of 5, RIASEC out of 25)
-        realistic = data.mechanical_ability * 5
-        investigative = ((data.science_test + data.logical_reasoning) / 2) * 5
-        artistic = data.verbal_ability * 5
-        social = data.interpersonal_skills_test * 5
-        enterprising = data.entrepreneurship_test * 5
-        conventional = data.clerical_ability * 5
 
         record = {
             "id": generate_result_id(),
@@ -568,12 +322,6 @@ def predict_track(data: StudentData):
             "logical_reasoning": data.logical_reasoning,
             "entrepreneurship_test": data.entrepreneurship_test,
             "mechanical_ability": data.mechanical_ability,
-            "realistic": float(realistic),
-            "investigative": float(investigative),
-            "artistic": float(artistic),
-            "social": float(social),
-            "enterprising": float(enterprising),
-            "conventional": float(conventional),
         }
 
         try:
@@ -583,21 +331,9 @@ def predict_track(data: StudentData):
             db_status = f"Insert failed ❌: {str(e)}"
 
         return {
-            "rule_based_prediction": rule_result,
             "group_based_result": group_result,
             "rf_model_prediction": str(rf_prediction) if rf_prediction else None,
             "rf_confidence": round(rf_confidence, 2) if rf_confidence else None,
-            "scoring_based_prediction": str(ml_prediction),
-            "track_scores": track_scores,
-            "riasec_scores": {
-                "realistic": float(realistic),
-                "investigative": float(investigative),
-                "artistic": float(artistic),
-                "social": float(social),
-                "enterprising": float(enterprising),
-                "conventional": float(conventional),
-            },
-            "final_track": ml_prediction,
             "db_status": db_status,
         }
     except Exception as e:
@@ -618,16 +354,6 @@ MSA_CODE_TO_FIELD = {
     "MA": "mechanical_ability",
 }
 
-# RIASEC category code → student_submission column name
-RIASEC_CODE_TO_FIELD = {
-    "R": "realistic",
-    "I": "investigative",
-    "A": "artistic",
-    "S": "social",
-    "E": "enterprising",
-    "C": "conventional",
-}
-
 
 class ComputeFromSupabaseRequest(BaseModel):
     user_id: str
@@ -635,14 +361,13 @@ class ComputeFromSupabaseRequest(BaseModel):
 
 @app.post("/compute-from-supabase")
 def compute_from_supabase(request: ComputeFromSupabaseRequest):
-    """Fetch a user's MSA + RIASEC answers from Supabase, compute scores, and upsert into student_submission."""
+    """Fetch a user's MSA answers from Supabase, compute scores, and upsert into student_submission."""
     try:
         user_id = request.user_id
 
         # -- Fetch reference data --
         msa_categories = fetch_msa_categories()
         msa_questions = fetch_msa_questions()
-        riasec_categories = fetch_riasec_categories()
 
         # Build lookup maps
         # right_answer keyed by (category_id, question_number)
@@ -681,32 +406,8 @@ def compute_from_supabase(request: ComputeFromSupabaseRequest):
             correct = correct_per_cat.get(cat_id, 0)
             ability_scores[field] = (correct / total) * 5
 
-        # -- Aggregate RIASEC answers --
-        riasec_answers = fetch_riasec_answers(user_id)
-        riasec_sums: dict = {}
-        for ans in riasec_answers:
-            cat_id = ans["category_id"]
-            riasec_sums[cat_id] = riasec_sums.get(cat_id, 0) + int(ans["answer"])
 
-        riasec_scores: dict = {}
-        for cat in riasec_categories:
-            cat_id = cat["id"]
-            code = cat["code"]
-            field = RIASEC_CODE_TO_FIELD.get(code)
-            if field is None:
-                continue
-            riasec_scores[field] = float(riasec_sums.get(cat_id, 0))
-
-        # -- Compute track percentages using existing formulas --
-        # RIASEC_MAX: max possible raw score per RIASEC category (5 questions × 5-point Likert scale)
-        RIASEC_MAX = 25
-
-        def pct_ability(v):
-            return (v / 5) * 100
-
-        def pct_riasec(v):
-            return (v / RIASEC_MAX) * 100
-
+        # -- Build and upsert record (abilities) --
         verbal_ability = ability_scores.get("verbal_ability", 0)
         numerical_ability = ability_scores.get("numerical_ability", 0)
         science_test = ability_scores.get("science_test", 0)
@@ -716,39 +417,6 @@ def compute_from_supabase(request: ComputeFromSupabaseRequest):
         logical_reasoning = ability_scores.get("logical_reasoning", 0)
         mechanical_ability = ability_scores.get("mechanical_ability", 0)
 
-        realistic = riasec_scores.get("realistic", 0)
-        investigative = riasec_scores.get("investigative", 0)
-        artistic = riasec_scores.get("artistic", 0)
-        social = riasec_scores.get("social", 0)
-        enterprising = riasec_scores.get("enterprising", 0)
-        conventional = riasec_scores.get("conventional", 0)
-
-        p_verbal = pct_ability(verbal_ability)
-        p_numerical = pct_ability(numerical_ability)
-        p_science = pct_ability(science_test)
-        p_clerical = pct_ability(clerical_ability)
-        p_interpersonal = pct_ability(interpersonal_skills_test)
-        p_entrepreneurship = pct_ability(entrepreneurship_test)
-        p_logical = pct_ability(logical_reasoning)
-        p_mechanical = pct_ability(mechanical_ability)
-
-        p_realistic = pct_riasec(realistic)
-        p_investigative = pct_riasec(investigative)
-        p_artistic = pct_riasec(artistic)
-        p_social = pct_riasec(social)
-        p_enterprising = pct_riasec(enterprising)
-        p_conventional = pct_riasec(conventional)
-
-        tvl_score = (p_realistic + p_mechanical) / 2
-        stem_score = (p_investigative + ((p_logical + p_science + p_numerical) / 3)) / 2
-        abm_part1 = (p_enterprising + p_conventional) / 2
-        abm_part2 = (p_entrepreneurship + p_clerical + p_numerical) / 3
-        abm_score = (abm_part1 + abm_part2) / 2
-        humss_score = (p_social + ((p_verbal + p_interpersonal) / 2)) / 2
-        arts_score = (p_artistic + ((p_verbal + p_interpersonal) / 2)) / 2
-        sports_score = (((p_realistic + p_social) / 2) + ((p_mechanical + p_interpersonal) / 2)) / 2
-
-        # -- Build and upsert record --
         record = {
             "user_id": user_id,
             "verbal_ability": float(verbal_ability),
@@ -759,18 +427,6 @@ def compute_from_supabase(request: ComputeFromSupabaseRequest):
             "logical_reasoning": float(logical_reasoning),
             "entrepreneurship_test": float(entrepreneurship_test),
             "mechanical_ability": float(mechanical_ability),
-            "realistic": float(realistic),
-            "investigative": float(investigative),
-            "artistic": float(artistic),
-            "social": float(social),
-            "enterprising": float(enterprising),
-            "conventional": float(conventional),
-            "TVL": float(tvl_score),
-            "STEM": float(stem_score),
-            "ABM": float(abm_score),
-            "HUMSS": float(humss_score),
-            "Arts": float(arts_score),
-            "Sports": float(sports_score),
         }
 
         try:
@@ -801,7 +457,7 @@ def get_user_result_endpoint(user_id: str):
 def get_student_result(user_id: str):
     """
     Get the latest assessment result for a specific user from student_submission table.
-    Returns all scores: MSA abilities, RIASEC scores, track scores.
+    Returns MSA abilities and track score fields.
     """
     try:
         result = get_latest_student_submission(user_id)
@@ -810,5 +466,43 @@ def get_student_result(user_id: str):
         return result
     except HTTPException:
         raise
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/verbal-questions")
+def get_verbal_questions():
+    """Proxy endpoint that returns rows from the Supabase table "Verbal Ability".
+    Uses SUPABASE_URL and SUPABASE_ANON_KEY environment variables.
+    """
+    try:
+        supabase_url = os.getenv("SUPABASE_URL")
+        anon = os.getenv("SUPABASE_ANON_KEY")
+        service_key = os.getenv("SUPABASE_SERVICE_KEY")
+        if not supabase_url:
+            return {"error": "Supabase URL not configured on server"}
+        # Prefer anon key for public access; fall back to service key if anon missing
+        key_to_use = anon or service_key
+        if not key_to_use:
+            return {"error": "Supabase anon or service key not configured on server"}
+
+        # Try a few candidate table names (some projects use different table names)
+        candidates = ['"Verbal Ability"', 'Questionnaire_verbal_ability', 'verbal_ability']
+        headers = {
+            "apikey": key_to_use,
+            "Authorization": f"Bearer {key_to_use}",
+            "Accept": "application/json",
+        }
+
+        last_err = None
+        for cand in candidates:
+            table = quote(cand)
+            url = f"{supabase_url}/rest/v1/{table}?select=id,question_id,question,A,B,C,D,answer,created_at,created_by&order=question_id.asc"
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code == 200:
+                return resp.json()
+            last_err = {"status": resp.status_code, "text": resp.text}
+
+        return {"error": "Supabase error: could not find table", "detail": last_err}
     except Exception as e:
         return {"error": str(e)}
