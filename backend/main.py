@@ -1,10 +1,13 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import joblib
 import threading
 import time
 import os
+from datetime import datetime
+import uuid
+from sqlalchemy import create_engine, text
 
 from routers.predict import router as rule_predict_router, compute_group_options
 from careers_mapping import GROUP_CAREERS
@@ -24,8 +27,12 @@ from supabase_client import (
     get_user_result,
     get_latest_student_submission,
 )
+from supabase_client import SUPABASE_URL, SUPABASE_SERVICE_KEY
 import requests
 from urllib.parse import quote
+import base64
+import re
+from fastapi import UploadFile, File
 
 app = FastAPI()
 app.include_router(rule_predict_router)
@@ -102,6 +109,34 @@ def get_model_prediction(data: "StudentData"):
     except Exception as e:
         print(f"Model prediction error: {e}")
         return None, None
+
+
+@app.post('/admin/fix_table_questions_sequence')
+def admin_fix_table_questions_sequence(token: str = None):
+    """Protected endpoint to fix the id sequence for Table_Questions.
+    Call as: POST /admin/fix_table_questions_sequence?token=<ADMIN_FIX_TOKEN>
+    The server reads `ADMIN_FIX_TOKEN` from env to authorize the call.
+    """
+    try:
+        expected = os.getenv('ADMIN_FIX_TOKEN')
+        if not expected:
+            raise HTTPException(status_code=500, detail='ADMIN_FIX_TOKEN not configured on server')
+        if not token or token != expected:
+            raise HTTPException(status_code=403, detail='Invalid admin token')
+
+        database_url = os.getenv('DATABASE_URL')
+        if not database_url:
+            raise HTTPException(status_code=500, detail='DATABASE_URL not configured on server')
+
+        engine = create_engine(database_url)
+        with engine.begin() as conn:
+            seq_name = conn.execute(text("SELECT pg_get_serial_sequence('public.Table_Questions','id') AS seqname")).scalar()
+            conn.execute(text("SELECT setval(pg_get_serial_sequence('public.Table_Questions','id'), COALESCE((SELECT MAX(id) FROM public.Table_Questions), 0) + 1, false)"))
+        return {"fixed_sequence": seq_name}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Track-related computation removed per user request.
 # Track-related constants and compute functions were intentionally removed.
@@ -180,6 +215,7 @@ def _background_sync():
         except Exception as e:
             print(f"Background sync failed: {str(e)}")
         time.sleep(SYNC_INTERVAL_SECONDS)
+
 
 
 @app.get("/")
@@ -354,6 +390,32 @@ MSA_CODE_TO_FIELD = {
     "MA": "mechanical_ability",
 }
 
+# Explicit prefix overrides for known categories to ensure consistent question_id prefixes
+CATEGORY_PREFIX_OVERRIDES = {
+    'verbal ability': 'VA',
+    'numerical ability': 'NA',
+    'science test': 'ST',
+    'clerical ability': 'CA',
+    'interpersonal skills test': 'IST',
+    'entrepreneurship test': 'ET',
+    'logical reasoning': 'LR',
+    'mechanical ability': 'MA',
+}
+
+
+def prefix_from_category(cat: str) -> str:
+    """Return standardized prefix for a human-friendly category name.
+    Uses `CATEGORY_PREFIX_OVERRIDES` when available, otherwise falls back to
+    taking the first letter of each word and uppercasing them.
+    """
+    if not cat:
+        return ''
+    key = cat.strip().lower()
+    if key in CATEGORY_PREFIX_OVERRIDES:
+        return CATEGORY_PREFIX_OVERRIDES[key]
+    # fallback: initials of words
+    return ''.join([w[0].upper() for w in cat.split() if w])
+
 
 class ComputeFromSupabaseRequest(BaseModel):
     user_id: str
@@ -487,7 +549,7 @@ def get_verbal_questions():
             return {"error": "Supabase anon or service key not configured on server"}
 
         # Try a few candidate table names (some projects use different table names)
-        candidates = ['"Verbal Ability"', 'Questionnaire_verbal_ability', 'verbal_ability']
+        candidates = ['"Verbal Ability"', 'Questionnaire_verbal_ability', 'verbal_ability', 'public."Verbal Ability"', 'public.Questionnaire_verbal_ability', 'public.verbal_ability']
         headers = {
             "apikey": key_to_use,
             "Authorization": f"Bearer {key_to_use}",
@@ -497,12 +559,1147 @@ def get_verbal_questions():
         last_err = None
         for cand in candidates:
             table = quote(cand)
-            url = f"{supabase_url}/rest/v1/{table}?select=id,question_id,question,A,B,C,D,answer,created_at,created_by&order=question_id.asc"
+            url = f"{supabase_url}/rest/v1/{table}?select=id,question_id,question,A,B,C,D,answer,long_text,created_at,created_by&order=question_id.asc"
             resp = requests.get(url, headers=headers, timeout=10)
             if resp.status_code == 200:
                 return resp.json()
             last_err = {"status": resp.status_code, "text": resp.text}
 
         return {"error": "Supabase error: could not find table", "detail": last_err}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/questions")
+def get_questions(category: str):
+    """Generic proxy for questionnaire tables. `category` should be a human-friendly name
+    like 'Verbal Ability' or 'Numerical Ability'. The endpoint will try a list of
+    candidate table names in Supabase and return the first successful result.
+    """
+    try:
+        supabase_url = os.getenv("SUPABASE_URL") or SUPABASE_URL
+        anon = os.getenv("SUPABASE_ANON_KEY")
+        service_key = os.getenv("SUPABASE_SERVICE_KEY") or SUPABASE_SERVICE_KEY
+        if not supabase_url:
+            return {"error": "Supabase URL not configured on server"}
+        key_to_use = anon or service_key
+        if not key_to_use:
+            return {"error": "Supabase anon or service key not configured on server"}
+
+        headers = {
+            "apikey": key_to_use,
+            "Authorization": f"Bearer {key_to_use}",
+            "Accept": "application/json",
+        }
+
+        # Use single table `Table_Questions` and filter by question_id prefix derived from category
+        prefix = prefix_from_category(category)
+        table = quote('Table_Questions')
+        # The table columns use opt_a..opt_e instead of A..D
+        select_fields = 'id,question_id,question,long_text,opt_a,opt_b,opt_c,opt_d,opt_e,answer,created_at,created_by,uuid'
+        # If no prefix provided, return all rows (beware large result sets)
+        if prefix:
+            url = f"{supabase_url}/rest/v1/{table}?select={select_fields}&question_id=like.{prefix}%25&order=question_id.asc"
+        else:
+            url = f"{supabase_url}/rest/v1/{table}?select={select_fields}&order=question_id.asc"
+
+        try:
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code == 200:
+                return resp.json()
+            return {"error": "Supabase error", "status": resp.status_code, "text": resp.text}
+        except Exception as e:
+            return {"error": str(e)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/questions")
+def create_question(category: str, payload: dict):
+    """Insert a new question row into the Supabase questionnaire table for `category`.
+    Expects JSON payload with columns appropriate for the table (e.g. question_id, question, A,B,C,D,answer).
+    """
+    try:
+        supabase_url = os.getenv("SUPABASE_URL") or SUPABASE_URL
+        key = os.getenv("SUPABASE_SERVICE_KEY") or SUPABASE_SERVICE_KEY
+        anon = os.getenv("SUPABASE_ANON_KEY")
+        if not supabase_url or not (key or anon):
+            return {"error": "Supabase URL or keys not configured"}
+        headers = {
+            "apikey": key or anon,
+            "Authorization": f"Bearer {key or anon}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation",
+        }
+        # Map incoming payload fields to the Table_Questions schema
+        def _map_payload(p: dict) -> dict:
+            mapped = {}
+            # pass through known fields
+            for k in ('question_id', 'question', 'long_text', 'created_by'):
+                if k in p:
+                    mapped[k] = p[k]
+            # allow passing an image URL for the question (storage public URL)
+            if 'image_url' in p:
+                mapped['image_url'] = p.get('image_url')
+            # map options A..E or opt_a..opt_e
+            if 'opt_a' in p or 'A' in p:
+                mapped['opt_a'] = p.get('opt_a') or p.get('A')
+            if 'opt_b' in p or 'B' in p:
+                mapped['opt_b'] = p.get('opt_b') or p.get('B')
+            if 'opt_c' in p or 'C' in p:
+                mapped['opt_c'] = p.get('opt_c') or p.get('C')
+            if 'opt_d' in p or 'D' in p:
+                mapped['opt_d'] = p.get('opt_d') or p.get('D')
+            # optional fifth option
+            mapped['opt_e'] = p.get('opt_e') or p.get('E') or None
+            if 'answer' in p:
+                mapped['answer'] = p['answer']
+            return mapped
+
+        mapped_payload = _map_payload(payload)
+
+        # Ensure question_id prefix matches category (frontend may generate question_id)
+        prefix = prefix_from_category(category)
+        qid = mapped_payload.get('question_id')
+        # If no question_id provided, compute next available id with the category prefix
+        if prefix and (not qid or str(qid).strip() == ''):
+            try:
+                seq_url = f"{supabase_url}/rest/v1/{quote('Table_Questions')}?select=question_id&question_id=like.{prefix}%25"
+                seq_resp = requests.get(seq_url, headers=headers, timeout=8)
+                if seq_resp.status_code == 200:
+                    items = seq_resp.json()
+                    nums = []
+                    for it in items:
+                        val = (it.get('question_id') or '')
+                        if not isinstance(val, str):
+                            val = str(val)
+                        m = None
+                        try:
+                            import re
+                            m = re.match(r'^' + re.escape(prefix) + r'(\d+)$', val)
+                        except Exception:
+                            m = None
+                        if m:
+                            try:
+                                nums.append(int(m.group(1)))
+                            except Exception:
+                                pass
+                    # Find the smallest missing positive integer (fill gaps)
+                    if nums:
+                        nums_set = set(nums)
+                        next_num = 1
+                        while next_num in nums_set:
+                            next_num += 1
+                    else:
+                        next_num = 1
+                    mapped_payload['question_id'] = f"{prefix}{str(next_num).zfill(3)}"
+                else:
+                    # fallback: use simple numeric id
+                    mapped_payload['question_id'] = f"{prefix}001"
+            except Exception:
+                mapped_payload['question_id'] = f"{prefix}001"
+        elif prefix and qid and not qid.startswith(prefix):
+            # enforce prefix if provided but missing
+            mapped_payload['question_id'] = f"{prefix}{qid}"
+
+        # Ensure a uuid exists for public identification; server-generate if missing
+        if 'uuid' not in mapped_payload or not mapped_payload.get('uuid'):
+            try:
+                mapped_payload['uuid'] = str(uuid.uuid4())
+            except Exception:
+                mapped_payload['uuid'] = None
+
+        table = quote('Table_Questions')
+
+        # If configured, perform an atomic direct-DB insert that finds the smallest
+        # missing positive `id` and uses it. This fills gaps (e.g., missing 17 in 1..30)
+        # and avoids sequence-based duplicate-key errors. Requires DATABASE_URL and
+        # USE_DIRECT_DB_INSERT=1 in env. Falls back to REST insertion on failure.
+        use_direct = os.getenv('USE_DIRECT_DB_INSERT', '').strip() == '1'
+        database_url = os.getenv('DATABASE_URL')
+        if use_direct and database_url:
+            try:
+                engine = create_engine(database_url)
+                insert_sql = text(
+                    "WITH next_id AS ("
+                    "  SELECT n FROM (SELECT generate_series(1, COALESCE((SELECT MAX(id) FROM public.Table_Questions),0)+1) AS n) g"
+                    "  LEFT JOIN public.Table_Questions t ON t.id = g.n"
+                    "  WHERE t.id IS NULL ORDER BY n LIMIT 1"
+                    ")"
+                    "INSERT INTO public.Table_Questions (id, question_id, question, long_text, opt_a, opt_b, opt_c, opt_d, opt_e, answer, created_by, image_url, uuid)"
+                    "SELECT next_id.n, :question_id, :question, :long_text, :opt_a, :opt_b, :opt_c, :opt_d, :opt_e, :answer, :created_by, :image_url, COALESCE(:uuid, gen_random_uuid()::text)"
+                    "FROM next_id RETURNING *;"
+                )
+
+                params = {
+                    'question_id': mapped_payload.get('question_id'),
+                    'question': mapped_payload.get('question'),
+                    'long_text': mapped_payload.get('long_text'),
+                    'opt_a': mapped_payload.get('opt_a'),
+                    'opt_b': mapped_payload.get('opt_b'),
+                    'opt_c': mapped_payload.get('opt_c'),
+                    'opt_d': mapped_payload.get('opt_d'),
+                    'opt_e': mapped_payload.get('opt_e'),
+                    'answer': mapped_payload.get('answer'),
+                    'created_by': mapped_payload.get('created_by'),
+                    'image_url': mapped_payload.get('image_url'),
+                    'uuid': mapped_payload.get('uuid'),
+                }
+
+                with engine.begin() as conn:
+                    res = conn.execute(insert_sql, params)
+                    row = res.fetchone()
+                    if row:
+                        # convert Row to dict
+                        data = dict(row._mapping)
+                        # Advance the sequence to MAX(id)+1 to keep it ahead
+                        try:
+                            conn.execute(text(
+                                "SELECT setval(pg_get_serial_sequence('public.\"Table_Questions\"','id'), COALESCE((SELECT MAX(id) FROM public.\"Table_Questions\"), 0) + 1, false)"
+                            ))
+                        except Exception:
+                            # if sequence update fails, continue; sequence can be fixed via admin endpoint
+                            pass
+                        import json
+                        return Response(content=json.dumps([data]), status_code=201, media_type="application/json")
+            except Exception as e:
+                print(f"Direct DB insert failed, falling back to REST: {e}")
+
+        # Fallback: use Supabase REST insert (existing behavior)
+        url = f"{supabase_url}/rest/v1/{table}"
+        try:
+            print(f"create_question: attempting POST to {url} payload={mapped_payload}")
+            resp = requests.post(url, json=mapped_payload, headers=headers, timeout=10)
+            resp_text = resp.text if hasattr(resp, 'text') else '<no body>'
+            print(f"create_question: status={resp.status_code} resp={resp_text}")
+            if resp.status_code in (200, 201):
+                return Response(content=resp.text, status_code=resp.status_code, media_type="application/json")
+            # forward error status and body
+            raise HTTPException(status_code=resp.status_code, detail=resp_text)
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.patch("/questions/{row_id}")
+def update_question(row_id: str, category: str, payload: dict):
+    """Update a question row by id in the Supabase table for `category`.
+    """
+    try:
+        supabase_url = os.getenv("SUPABASE_URL") or SUPABASE_URL
+        key = os.getenv("SUPABASE_SERVICE_KEY") or SUPABASE_SERVICE_KEY
+        anon = os.getenv("SUPABASE_ANON_KEY")
+        if not supabase_url or not (key or anon):
+            return {"error": "Supabase URL or keys not configured on server"}
+        headers = {
+            "apikey": key or anon,
+            "Authorization": f"Bearer {key or anon}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation",
+        }
+
+        # Map incoming payload fields to Table_Questions column names (opt_a..opt_e, long_text)
+        mapped = {}
+        for k in ('question_id', 'question', 'long_text', 'created_by', 'image_url'):
+            if k in payload:
+                mapped[k] = payload[k]
+        # options mapping
+        if 'opt_a' in payload or 'A' in payload:
+            mapped['opt_a'] = payload.get('opt_a') or payload.get('A')
+        if 'opt_b' in payload or 'B' in payload:
+            mapped['opt_b'] = payload.get('opt_b') or payload.get('B')
+        if 'opt_c' in payload or 'C' in payload:
+            mapped['opt_c'] = payload.get('opt_c') or payload.get('C')
+        if 'opt_d' in payload or 'D' in payload:
+            mapped['opt_d'] = payload.get('opt_d') or payload.get('D')
+        mapped['opt_e'] = payload.get('opt_e') or payload.get('E') or None
+        if 'answer' in payload:
+            mapped['answer'] = payload['answer']
+
+        # Use Table_Questions and allow row_id to be either numeric id or question_id
+        table = quote('Table_Questions')
+        # Determine whether row_id is an integer id, a uuid, or a question_id
+        is_int = False
+        is_uuid = False
+        try:
+            int(row_id)
+            is_int = True
+        except Exception:
+            is_int = False
+        try:
+            uuid.UUID(row_id)
+            is_uuid = True
+        except Exception:
+            is_uuid = False
+
+        if is_int:
+            url = f"{supabase_url}/rest/v1/{table}?id=eq.{quote(row_id)}"
+        elif is_uuid:
+            url = f"{supabase_url}/rest/v1/{table}?uuid=eq.{quote(row_id)}"
+        else:
+            # treat row_id as question_id
+            url = f"{supabase_url}/rest/v1/{table}?question_id=eq.{quote(row_id)}"
+
+        # log outgoing update for debugging
+        try:
+            print(f"update_question: PATCH -> {url} payload={mapped}")
+        except Exception:
+            pass
+        resp = requests.patch(url, json=mapped, headers=headers, timeout=10)
+        try:
+            print(f"update_question: supabase status={resp.status_code} body={getattr(resp, 'text', '<no body>')}" )
+        except Exception:
+            pass
+        if resp.status_code in (200, 204):
+            # return representation if present
+            try:
+                return Response(content=resp.text, status_code=200, media_type="application/json")
+            except Exception:
+                return {"updated": True}
+        # surface Supabase error
+        raise HTTPException(status_code=resp.status_code, detail=resp.text)
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.delete("/questions/{row_id}")
+def delete_question(row_id: str, category: str):
+    """Delete a question row by id from the Supabase table for `category`.
+    """
+    try:
+        supabase_url = os.getenv("SUPABASE_URL") or SUPABASE_URL
+        key = os.getenv("SUPABASE_SERVICE_KEY") or SUPABASE_SERVICE_KEY
+        anon = os.getenv("SUPABASE_ANON_KEY")
+        if not supabase_url or not (key or anon):
+            return {"error": "Supabase URL or keys not configured"}
+        headers = {
+            "apikey": key or anon,
+            "Authorization": f"Bearer {key or anon}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation",
+        }
+        # Target the canonical single table `Table_Questions` and allow
+        # deletion by numeric id, uuid, or question_id.
+        table = quote('Table_Questions')
+        # Determine type of row_id
+        is_int = False
+        is_uuid = False
+        try:
+            int(row_id)
+            is_int = True
+        except Exception:
+            is_int = False
+        try:
+            import uuid as _uuid
+            _uuid.UUID(row_id)
+            is_uuid = True
+        except Exception:
+            is_uuid = False
+
+        if is_int:
+            url = f"{supabase_url}/rest/v1/{table}?id=eq.{quote(row_id)}"
+        elif is_uuid:
+            url = f"{supabase_url}/rest/v1/{table}?uuid=eq.{quote(row_id)}"
+        else:
+            url = f"{supabase_url}/rest/v1/{table}?question_id=eq.{quote(row_id)}"
+
+            # Attempt to fetch the existing row to determine any storage folder to delete
+            try:
+                fetch_resp = requests.get(url, headers=headers, timeout=8)
+                row_data = None
+                if fetch_resp.status_code == 200:
+                    try:
+                        fetched = fetch_resp.json()
+                        if isinstance(fetched, list) and fetched:
+                            row_data = fetched[0]
+                        elif isinstance(fetched, dict):
+                            row_data = fetched
+                    except Exception:
+                        row_data = None
+
+                # Collect exact storage objects referenced in row fields and delete them.
+                delete_errors = []
+                if row_data:
+                    bucket_marker = f"/storage/v1/object/"
+                    for k in ('opt_a','opt_b','opt_c','opt_d','opt_e','image_url'):
+                        v = row_data.get(k)
+                        if isinstance(v, str) and bucket_marker in v:
+                            try:
+                                # parse bucket and object path from public URL portion
+                                m = re.search(r'/storage/v1/object/(?:public/)?([^/]+)/(.*)$', v)
+                                if not m:
+                                    continue
+                                bname = m.group(1)
+                                objpath = (m.group(2) or '').split('?',1)[0].split('#',1)[0]
+                                if not bname or not objpath:
+                                    continue
+                                del_url = f"{supabase_url.rstrip('/')}/storage/v1/object/{quote(bname)}/{quote(objpath, safe='/')}"
+                                try:
+                                    dresp = requests.delete(del_url, headers={
+                                        'apikey': os.getenv('SUPABASE_SERVICE_KEY') or SUPABASE_SERVICE_KEY,
+                                        'Authorization': f"Bearer {os.getenv('SUPABASE_SERVICE_KEY') or SUPABASE_SERVICE_KEY}",
+                                    }, timeout=20)
+                                    if dresp.status_code not in (200, 204):
+                                        delete_errors.append((f"{bname}/{objpath}", dresp.status_code, getattr(dresp, 'text', None)))
+                                except Exception as e:
+                                    delete_errors.append((f"{bname}/{objpath}", 'exception', str(e)))
+                            except Exception:
+                                continue
+
+                # Proceed to delete the DB row regardless of storage deletion outcome.
+                try:
+                    resp = requests.delete(url, headers=headers, timeout=10)
+                    if resp.status_code in (200, 204):
+                        result = {"deleted": True}
+                        if delete_errors:
+                            result['storage_delete_warnings'] = delete_errors
+                        return result
+                    # forward Supabase error
+                    raise HTTPException(status_code=resp.status_code, detail=resp.text)
+                except HTTPException:
+                    raise
+                except Exception as e:
+                    return {"error": str(e)}
+            except HTTPException:
+                raise
+            except Exception as e:
+                return {"error": str(e)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/user-profile")
+def get_user_profile(email: str):
+    """Lookup a users_profile row by email and return it.
+    Expects a Supabase table named `users_profile` with an `email` and `usertype` column.
+    """
+    try:
+        supabase_url = SUPABASE_URL or os.getenv("SUPABASE_URL")
+        key = SUPABASE_SERVICE_KEY or os.getenv("SUPABASE_SERVICE_KEY")
+        if not supabase_url or not key:
+            return {"error": "Supabase URL or service key not configured on server"}
+
+        headers = {
+            "apikey": key,
+            "Authorization": f"Bearer {key}",
+            "Accept": "application/json",
+        }
+
+        # safe-encode email for URL
+        q = quote(email)
+        # Query the `users_profile` table (note plural `users_profile`)
+        url = f"{supabase_url}/rest/v1/users_profile?email=eq.{q}&select=*&limit=1"
+        resp = requests.get(url, headers=headers, timeout=8)
+        if resp.status_code != 200:
+            return {"error": "Supabase error", "status": resp.status_code, "detail": resp.text}
+        data = resp.json()
+        if data:
+            user = data[0]
+            if 'email' in user and isinstance(user['email'], str):
+                user['email'] = user['email'].strip()
+            if 'password' in user:
+                user.pop('password', None)
+            return user
+
+        # Fallback: try a case-insensitive / wildcard match in case stored emails have
+        # trailing whitespace or newline characters (some rows have '\r\n').
+        try:
+            ilike_val = quote(f"%{email}%")
+            alt_url = f"{supabase_url}/rest/v1/users_profile?email=ilike.{ilike_val}&select=*&limit=1"
+            resp2 = requests.get(alt_url, headers=headers, timeout=8)
+            if resp2.status_code == 200:
+                data2 = resp2.json()
+                if data2:
+                    user = data2[0]
+                    if 'email' in user and isinstance(user['email'], str):
+                        user['email'] = user['email'].strip()
+                    if 'password' in user:
+                        user.pop('password', None)
+                    return user
+        except Exception:
+            pass
+
+        return {}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _decode_data_url(data_url: str):
+    """Decode a data URL (data:[<mediatype>][;base64],<data>) into (bytes, content_type)"""
+    m = re.match(r'^data:(?P<ctype>[^;]+)(;base64)?,(?P<data>.*)$', data_url, re.DOTALL)
+    if not m:
+        raise ValueError('Invalid data URL')
+    ctype = m.group('ctype')
+    data = m.group('data')
+    if ';base64' in data_url:
+        raw = base64.b64decode(data)
+    else:
+        raw = data.encode('utf-8')
+    return raw, ctype
+
+
+@app.post('/upload_dataurl')
+def upload_dataurl(payload: dict):
+    """Upload a single data URL to Supabase storage and return a public URL.
+
+    Expects `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` to be configured in the server env.
+    """
+    try:
+        if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+            raise HTTPException(status_code=500, detail='Supabase storage not configured on server')
+        bucket = payload.get('bucket')
+        path = payload.get('path')
+        data_url = payload.get('data_url')
+        # optional hints from client
+        category = payload.get('category') or payload.get('cat') or None
+        question_id = payload.get('question_id') or payload.get('qid') or None
+        if not bucket or not path or not data_url:
+            raise HTTPException(status_code=400, detail='bucket, path and data_url required')
+        try:
+            raw, ctype = _decode_data_url(data_url)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f'Invalid data URL: {e}')
+
+        # Server-side folder mapping (safe and opt-in): map friendly categories to folder names
+        # and canonical filenames. This ensures uploads for mapped categories use
+        # predictable paths like NA-Test-01/NA-Question and NA-Test-01/NA-OPT-A.
+        USE_SERVER_PATH_MAPPING = os.getenv('USE_SERVER_PATH_MAPPING', '1') in ('1','true','True')
+        category_folder_map = {
+            'Numerical Ability': 'NA-Test-01',
+            'Numerical_Ability': 'NA-Test-01',
+            'numerical_ability': 'NA-Test-01',
+            'Numerical%20Ability': 'NA-Test-01',
+            'Mechanical Ability': 'MA-Test-12',
+            'Verbal Ability': 'VA-Test-01',
+        }
+
+        # Decide whether to override the provided path
+        mapped_path = None
+        try:
+            if USE_SERVER_PATH_MAPPING:
+                # determine folder key: prefer explicit category, else infer from provided path
+                folder_key = None
+                if category:
+                    folder_key = category
+                else:
+                    # try to extract leading folder from client-supplied path
+                    try:
+                        folder_key = str(path).split('/',1)[0]
+                    except Exception:
+                        folder_key = None
+
+                def norm(s):
+                    return str(s or '').lower().replace('%20',' ').replace('_',' ').strip()
+
+                mapped_folder = None
+                if folder_key:
+                    # match normalized keys
+                    for k,v in category_folder_map.items():
+                        if norm(k) == norm(folder_key):
+                            mapped_folder = v; break
+                # if not found, try matching by question_id prefix
+                if not mapped_folder and question_id:
+                    m = str(question_id).strip().upper()
+                    for v in category_folder_map.values():
+                        if str(v).upper().startswith(m.split('-')[0]):
+                            mapped_folder = v; break
+
+                if mapped_folder:
+                    # determine extension from original path or content-type
+                    ext = ''
+                    try:
+                        if '.' in (path or ''):
+                            ext = '.' + (path.rsplit('.',1)[1])
+                        else:
+                            # determine from content-type
+                            ctype = None
+                            try:
+                                raw_tmp, ctype = _decode_data_url(data_url)
+                            except Exception:
+                                ctype = None
+                            if ctype and '/' in ctype:
+                                if ctype.endswith('jpeg') or ctype.endswith('jpg'):
+                                    ext = '.jpg'
+                                elif ctype.endswith('png'):
+                                    ext = '.png'
+                                elif ctype.endswith('webp'):
+                                    ext = '.webp'
+                                elif ctype.endswith('gif'):
+                                    ext = '.gif'
+                                else:
+                                    ext = ''
+                    except Exception:
+                        ext = ''
+
+                    # infer field type (opt_a .. opt_e or question) from the supplied path
+                    lowered = (path or '').lower()
+                    field_letter = None
+                    for letter in ('a','b','c','d','e'):
+                        if f'opt_{letter}' in lowered or f'_opt{letter}' in lowered or f'opt-{letter}' in lowered:
+                            field_letter = letter.upper(); break
+                    is_question = ('question' in lowered) or (field_letter is None and ('opt_' not in lowered and 'opt-' not in lowered))
+
+                    # Use per-question filenames when question_id is provided to avoid collisions
+                    if question_id:
+                        safe_qid = str(question_id).strip()
+                        if is_question:
+                            filename = f"{safe_qid}_Question{ext}"
+                        else:
+                            filename = f"{safe_qid}_OPT_{field_letter}{ext}"
+                    else:
+                        # fallback to prefix-based filenames for backward compatibility
+                        prefix = str(mapped_folder).split('-')[0].upper()
+                        if is_question:
+                            filename = f"{prefix}-Question{ext}"
+                        else:
+                            filename = f"{prefix}-OPT-{field_letter}{ext}"
+
+                    mapped_path = f"{mapped_folder}/{filename}"
+        except Exception as e:
+            # fallback gracefully to client-provided path
+            print('upload_dataurl: server mapping failed', e)
+
+        # choose final path to upload
+        final_path = mapped_path or path
+
+        # Supabase storage upload: PUT to /storage/v1/object/{bucket}/{final_path} with raw bytes
+        upload_url = f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/{bucket}/{final_path}"
+        params = {'upsert': 'true', 'cacheControl': '3600'}
+        headers = {
+            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+            'apikey': SUPABASE_SERVICE_KEY,
+            'Content-Type': ctype,
+        }
+        resp = requests.put(upload_url, params=params, headers=headers, data=raw, timeout=20)
+        if resp.status_code not in (200, 201):
+            raise HTTPException(status_code=502, detail=f'Upload failed: {resp.status_code} {resp.text}')
+        # Build public object URL
+        public = f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{bucket}/{quote(final_path, safe='/')}"
+        return { 'public_url': public }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+
+@app.delete('/questions/{row_id}')
+def delete_question(row_id: str, category: str = ''):
+    """Delete a question row by numeric id from Table_Questions via Supabase REST.
+    Call as: DELETE /questions/{row_id}?category=<optional>
+    """
+    try:
+        supabase_url = os.getenv('SUPABASE_URL') or SUPABASE_URL
+        key = os.getenv('SUPABASE_SERVICE_KEY') or SUPABASE_SERVICE_KEY
+        anon = os.getenv('SUPABASE_ANON_KEY')
+        if not supabase_url or not (key or anon):
+            return {"error": "Supabase URL or keys not configured"}
+        headers = {
+            "apikey": key or anon,
+            "Authorization": f"Bearer {key or anon}",
+            "Accept": "application/json",
+        }
+        table = quote('Table_Questions')
+        # Try to delete by numeric id column `id`
+        url = f"{supabase_url}/rest/v1/{table}?id=eq.{quote(str(row_id))}"
+        resp = requests.delete(url, headers=headers, timeout=10)
+        if resp.status_code in (200,204):
+            return {"deleted": True}
+        return {"error": "Supabase delete failed", "status": resp.status_code, "text": resp.text}
+    except Exception as e:
+        return {"error": str(e)}
+@app.post('/delete_object')
+def delete_object(payload: dict):
+    """Delete an object from Supabase storage.
+
+    Accepts either `{ "public_url": "..." }` or `{ "bucket": "name", "path": "path/to/object.png" }`.
+    Returns `{ deleted: True }` on success or an error detail on failure.
+    """
+    try:
+        if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+            raise HTTPException(status_code=500, detail='Supabase storage not configured on server')
+        public_url = payload.get('public_url')
+        bucket = payload.get('bucket')
+        path = payload.get('path')
+        if public_url and (not bucket or not path):
+            # try to parse bucket/path from known Supabase public URL shape
+            # e.g. https://<supabase>/storage/v1/object/public/{bucket}/{path}
+            m = re.search(r'/storage/v1/object/(?:public/)?([^/]+)/(.*)$', public_url)
+            if m:
+                bucket = bucket or m.group(1)
+                path = path or m.group(2)
+        if not bucket or not path:
+            raise HTTPException(status_code=400, detail='bucket and path (or public_url) required')
+
+        delete_url = f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/{bucket}/{quote(path, safe='/')}"
+        headers = {
+            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+            'apikey': SUPABASE_SERVICE_KEY,
+        }
+        resp = requests.delete(delete_url, headers=headers, timeout=15)
+        if resp.status_code in (200, 204):
+            return {'deleted': True}
+        # return the status text for debugging
+        raise HTTPException(status_code=502, detail=f'delete failed: {resp.status_code} {resp.text}')
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post('/promote_object')
+def promote_object(payload: dict):
+    """Promote a temporary object (public_url or bucket+from_path) into a canonical path.
+
+    Accepts one of:
+      - { public_url, category, question_id, fieldName }
+      - { bucket, from_path, to_path }
+      - { public_url, to_path }
+
+    The endpoint will fetch the source object, PUT it to the target path using
+    the server's SUPABASE_SERVICE_KEY, delete the source object if it is in the
+    same Supabase storage, and return the new public URL.
+    """
+    try:
+        if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+            raise HTTPException(status_code=500, detail='Supabase storage not configured on server')
+
+        public_url = payload.get('public_url')
+        bucket = payload.get('bucket')
+        from_path = payload.get('from_path') or payload.get('path')
+        to_path = payload.get('to_path')
+        target_public_url = payload.get('target_public_url') or payload.get('replace_public_url')
+        category = payload.get('category')
+        question_id = payload.get('question_id') or payload.get('qid')
+        fieldName = payload.get('fieldName') or payload.get('field')
+
+        # If public_url provided, try to parse bucket/from_path
+        if public_url and (not bucket or not from_path):
+            m = re.search(r'/storage/v1/object/(?:public/)?([^/]+)/(.*)$', public_url)
+            if m:
+                bucket = bucket or m.group(1)
+                # strip any query string or fragment from parsed path
+                parsed_path = (m.group(2) or '')
+                from_path = from_path or parsed_path.split('?', 1)[0].split('#', 1)[0]
+
+        # If caller explicitly provided a target_public_url (existing canonical file), prefer it as destination
+        if target_public_url and (not to_path):
+            m = re.search(r'/storage/v1/object/(?:public/)?([^/]+)/(.*)$', target_public_url)
+            if m:
+                bucket = bucket or m.group(1)
+                parsed_to = (m.group(2) or '')
+                to_path = to_path or parsed_to.split('?',1)[0].split('#',1)[0]
+
+        # If caller asked server to determine canonical to_path using category/question_id/fieldName
+        if (not to_path) and (category or question_id) and fieldName:
+            # reuse upload_dataurl mapping logic: simple folder map
+            category_folder_map = {
+                'Numerical Ability': 'NA-Test-01',
+                'Numerical_Ability': 'NA-Test-01',
+                'numerical_ability': 'NA-Test-01',
+                'Numerical%20Ability': 'NA-Test-01',
+                'Mechanical Ability': 'MA-Test-12',
+                'Verbal Ability': 'VA-Test-01',
+            }
+            def norm(s):
+                return str(s or '').lower().replace('%20',' ').replace('_',' ').strip()
+            mapped_folder = None
+            folder_key = category if category else (from_path.split('/',1)[0] if from_path else None)
+            if folder_key:
+                for k,v in category_folder_map.items():
+                    if norm(k) == norm(folder_key): mapped_folder = v; break
+            # fallback: infer from question_id prefix
+            if not mapped_folder and question_id:
+                for v in category_folder_map.values():
+                    if str(v).upper().startswith(str(question_id).upper().split('-')[0]): mapped_folder = v; break
+
+            # determine extension from source path or default to .png
+            ext = ''
+            try:
+                if from_path and '.' in from_path:
+                    ext = '.' + from_path.rsplit('.',1)[1]
+                else:
+                    # attempt to HEAD the public_url for content-type
+                    if public_url:
+                        r = requests.head(public_url, timeout=10)
+                        ctype = r.headers.get('Content-Type') if r is not None else None
+                        if ctype and '/' in ctype:
+                            if ctype.endswith('jpeg') or ctype.endswith('jpg'): ext = '.jpg'
+                            elif ctype.endswith('png'): ext = '.png'
+                            elif ctype.endswith('webp'): ext = '.webp'
+                            elif ctype.endswith('gif'): ext = '.gif'
+            except Exception:
+                ext = ext or ''
+
+            is_question = 'question' in fieldName.lower()
+
+            # Prefer prefix-based canonical filenames when we have a mapped folder
+            # (e.g. NA-Test-01 -> prefix 'NA'). This ensures option images for
+            # mapped categories are consistently named like `NA-OPT-A`..`NA-OPT-E`.
+            if question_id and not mapped_folder:
+                # Only use per-question filenames when there is NO mapped folder.
+                safe_qid = str(question_id).strip()
+                if is_question:
+                    filename = f"{safe_qid}_Question{ext}"
+                else:
+                    # derive letter if fieldName like opt_a
+                    m = re.search(r'([A-Ea-e])', fieldName)
+                    letter = (m.group(1).upper() if m else 'A')
+                    filename = f"{safe_qid}_OPT_{letter}{ext}"
+            else:
+                # Prefer prefix-based naming. If we have a mapped_folder use its
+                # leading segment as the prefix (e.g. 'NA' from 'NA-Test-01');
+                # otherwise fall back to a safe prefix derived from question_id
+                # or a timestamp.
+                prefix = None
+                if mapped_folder:
+                    prefix = str(mapped_folder).split('-')[0].upper()
+                elif question_id:
+                    prefix = str(question_id).split('-')[0].upper()
+                else:
+                    prefix = f"promoted_{int(time.time())}"
+
+                if is_question:
+                    filename = f"{prefix}-Question{ext}"
+                else:
+                    m = re.search(r'([A-Ea-e])', fieldName)
+                    letter = (m.group(1).upper() if m else 'A')
+                    filename = f"{prefix}-OPT-{letter}{ext}"
+
+            if mapped_folder:
+                to_path = f"{mapped_folder}/{filename}"
+            else:
+                to_path = f"uploads/{filename}"
+
+        if not bucket or not from_path or not to_path:
+            raise HTTPException(status_code=400, detail='public_url (or bucket+from_path) and to_path (or category+question_id+fieldName) required')
+
+        debug_steps = []
+        # Fetch the source bytes
+        src_url = public_url or f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{bucket}/{quote(from_path, safe='/')}"
+        debug_steps.append(f"fetching source_url={src_url}")
+        try:
+            r = requests.get(src_url, timeout=20)
+            debug_steps.append(f"fetched source status={getattr(r,'status_code',None)}")
+        except Exception as _e:
+            debug_steps.append(f"fetch-exception: {_e}")
+            raise HTTPException(status_code=502, detail=f'Failed to fetch source object: {_e}')
+        if r.status_code not in (200, 206):
+            debug_steps.append(f"fetch failed status={r.status_code} body={getattr(r,'text',None)}")
+            raise HTTPException(status_code=502, detail=f'Failed to fetch source object: {r.status_code}')
+        raw = r.content
+        ctype = r.headers.get('Content-Type', 'application/octet-stream')
+
+        # Upload to target path (PUT with upsert semantics). Use upload-first
+        # to ensure the canonical path is present if the upload succeeds, then
+        # remove the temp source. Retry a few times on transient errors.
+        upload_url = f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/{bucket}/{to_path}"
+        params = {'upsert': 'true', 'cacheControl': '3600'}
+        headers = {
+            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+            'apikey': SUPABASE_SERVICE_KEY,
+            'Content-Type': ctype,
+        }
+        upload_success = False
+        upload_exc = None
+        for attempt in range(1, 4):
+            try:
+                resp = requests.put(upload_url, params=params, headers=headers, data=raw, timeout=30)
+                debug_steps.append(f"upload attempt={attempt} status={getattr(resp,'status_code',None)}")
+                if resp.status_code in (200, 201):
+                    upload_success = True
+                    break
+                upload_exc = f"status={resp.status_code} body={getattr(resp,'text',None)}"
+            except Exception as _e:
+                upload_exc = str(_e)
+                debug_steps.append(f"upload attempt={attempt} exception={upload_exc}")
+            time.sleep(0.5 * attempt)
+
+        if not upload_success:
+            debug_steps.append(f"upload failed after attempts: {upload_exc}")
+            raise HTTPException(status_code=502, detail=f'Promote upload failed: {upload_exc}')
+
+        # Build canonical public URL
+        canonical = f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{bucket}/{quote(to_path, safe='/')}"
+
+        # Attempt to delete the source if requested and it's inside Supabase storage and different from target
+        try:
+            delete_source = bool(payload.get('delete_source', True))
+            if delete_source:
+                # parse source bucket/path again
+                del_bucket = bucket
+                del_path = None
+                m2 = re.search(r'/storage/v1/object/(?:public/)?([^/]+)/(.*)$', src_url)
+                if m2:
+                    del_bucket = m2.group(1)
+                    # strip query/fragments so deletion targets the actual object name
+                    del_path = (m2.group(2) or '').split('?',1)[0].split('#',1)[0]
+                # only delete if we have a valid parse and source != target
+                if del_bucket and del_path and not (del_bucket == bucket and del_path == to_path):
+                    delete_url = f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/{del_bucket}/{quote(del_path, safe='/')}"
+                    headers_del = {'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}', 'apikey': SUPABASE_SERVICE_KEY}
+                    # attempt deletion with retries (best-effort)
+                    for attempt in range(1,4):
+                        try:
+                            dresp = requests.delete(delete_url, headers=headers_del, timeout=15)
+                            debug_steps.append(f"delete_source attempt={attempt} status={getattr(dresp,'status_code',None)} path={del_path}")
+                            break
+                        except Exception as _e:
+                            debug_steps.append(f"delete_source attempt={attempt} exception={_e}")
+                            time.sleep(0.2 * attempt)
+        except Exception:
+            pass
+
+        result = {'public_url': canonical, 'promoted': True}
+        # If caller requested debug information, include the collected steps
+        if payload.get('debug'):
+            result['_debug_steps'] = debug_steps
+        # Also print debug to server logs for troubleshooting
+        try:
+            for s in debug_steps:
+                print('promote_object:', s)
+        except Exception:
+            pass
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/users")
+def list_users(limit: int = 100):
+    """Return a list of rows from `users_profile`. Use sparingly; paginated via `limit` param."""
+    try:
+        supabase_url = SUPABASE_URL or os.getenv("SUPABASE_URL")
+        key = SUPABASE_SERVICE_KEY or os.getenv("SUPABASE_SERVICE_KEY")
+        if not supabase_url or not key:
+            return {"error": "Supabase URL or service key not configured on server"}
+
+        headers = {
+            "apikey": key,
+            "Authorization": f"Bearer {key}",
+            "Accept": "application/json",
+        }
+
+        url = f"{supabase_url}/rest/v1/users_profile?select=*&limit={int(limit)}"
+        resp = requests.get(url, headers=headers, timeout=10)
+        if resp.status_code != 200:
+            return {"error": "Supabase error", "status": resp.status_code, "detail": resp.text}
+        return resp.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.patch("/users/{user_id}")
+def update_user(user_id: str, payload: dict):
+    """Update a users_profile row by id."""
+    try:
+        supabase_url = SUPABASE_URL or os.getenv("SUPABASE_URL")
+        key = SUPABASE_SERVICE_KEY or os.getenv("SUPABASE_SERVICE_KEY")
+        if not supabase_url or not key:
+            return {"error": "Supabase URL or service key not configured on server"}
+
+        headers = {
+            "apikey": key,
+            "Authorization": f"Bearer {key}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation",
+        }
+
+        url = f"{supabase_url}/rest/v1/users_profile?id=eq.{quote(user_id)}"
+        # ensure an update timestamp is recorded (column `update_at`)
+        payload_to_send = dict(payload or {})
+        try:
+            payload_to_send['update_at'] = datetime.utcnow().isoformat() + 'Z'
+        except Exception:
+            pass
+        resp = requests.patch(url, json=payload_to_send, headers=headers, timeout=10)
+        if resp.status_code != 200:
+            return {"error": "Supabase error updating user", "status": resp.status_code, "detail": resp.text}
+        data = resp.json()
+        if isinstance(data, list) and data:
+            user = data[0]
+        else:
+            user = data if isinstance(data, dict) else {}
+        if 'email' in user and isinstance(user['email'], str):
+            user['email'] = user['email'].strip()
+        if 'password' in user:
+            user.pop('password', None)
+        return user
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.delete("/users/{user_id}")
+def delete_user(user_id: str):
+    """Delete a users_profile row by id."""
+    try:
+        supabase_url = SUPABASE_URL or os.getenv("SUPABASE_URL")
+        key = SUPABASE_SERVICE_KEY or os.getenv("SUPABASE_SERVICE_KEY")
+        if not supabase_url or not key:
+            return {"error": "Supabase URL or service key not configured on server"}
+
+        headers = {
+            "apikey": key,
+            "Authorization": f"Bearer {key}",
+            "Accept": "application/json",
+        }
+
+        url = f"{supabase_url}/rest/v1/users_profile?id=eq.{quote(user_id)}"
+        resp = requests.delete(url, headers=headers, timeout=10)
+        if resp.status_code in (200, 204):
+            return {"deleted": True}
+        return {"error": "Supabase error deleting user", "status": resp.status_code, "detail": resp.text}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/submissions")
+def list_submissions(limit: int = 200):
+    """Return rows from `student_submission` table (paginated via `limit`)."""
+    try:
+        supabase_url = SUPABASE_URL or os.getenv("SUPABASE_URL")
+        key = SUPABASE_SERVICE_KEY or os.getenv("SUPABASE_SERVICE_KEY")
+        if not supabase_url or not key:
+            return {"error": "Supabase URL or service key not configured on server"}
+
+        headers = {
+            "apikey": key,
+            "Authorization": f"Bearer {key}",
+            "Accept": "application/json",
+        }
+
+        url = f"{supabase_url}/rest/v1/student_submission?select=*&limit={int(limit)}&order=submitted_at.desc"
+        resp = requests.get(url, headers=headers, timeout=12)
+        if resp.status_code != 200:
+            return {"error": "Supabase error", "status": resp.status_code, "detail": resp.text}
+        return resp.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+class AuthRequest(BaseModel):
+    email: str
+    password: str
+
+
+@app.post("/auth")
+def auth_user(creds: AuthRequest):
+    """Authenticate a user by email and password against users_profile table.
+    NOTE: This assumes `users_profile` stores passwords in plaintext or comparable form.
+    For production use proper password hashing or Supabase Auth.
+    """
+    try:
+        supabase_url = SUPABASE_URL or os.getenv("SUPABASE_URL")
+        key = SUPABASE_SERVICE_KEY or os.getenv("SUPABASE_SERVICE_KEY")
+        if not supabase_url or not key:
+            return {"error": "Supabase URL or service key not configured on server"}
+
+        headers = {
+            "apikey": key,
+            "Authorization": f"Bearer {key}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+
+        # Query the users_profile table for matching email AND password
+        # Use eq filters; ensure values are URL-encoded
+        email_q = quote(creds.email)
+        pwd_q = quote(creds.password)
+        url = f"{supabase_url}/rest/v1/users_profile?email=eq.{email_q}&password=eq.{pwd_q}&select=*&limit=1"
+        resp = requests.get(url, headers=headers, timeout=8)
+        if resp.status_code != 200:
+            return {"error": "Supabase error", "status": resp.status_code, "detail": resp.text}
+        data = resp.json()
+        if data:
+            user = data[0]
+            if 'email' in user and isinstance(user['email'], str):
+                user['email'] = user['email'].strip()
+            if 'password' in user:
+                user.pop('password', None)
+            return {"user": user}
+
+        # Fallback: if exact match failed, try a case-insensitive email match (ilike)
+        # to account for stray whitespace/newlines in stored emails while still matching password.
+        try:
+            ilike_email = quote(f"%{creds.email}%")
+            alt_url = f"{supabase_url}/rest/v1/users_profile?email=ilike.{ilike_email}&password=eq.{pwd_q}&select=*&limit=1"
+            resp2 = requests.get(alt_url, headers=headers, timeout=8)
+            if resp2.status_code == 200:
+                data2 = resp2.json()
+                if data2:
+                    user = data2[0]
+                    if 'email' in user and isinstance(user['email'], str):
+                        user['email'] = user['email'].strip()
+                    if 'password' in user:
+                        user.pop('password', None)
+                    return {"user": user}
+        except Exception:
+            pass
+
+        return {"error": "Invalid credentials"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+class SignupRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+    usertype: str = 'user'
+
+
+@app.post("/signup")
+def signup_user(req: SignupRequest):
+    """Create a new users_profile row.
+    Returns the created row (without password) on success.
+    """
+    try:
+        supabase_url = SUPABASE_URL or os.getenv("SUPABASE_URL")
+        key = SUPABASE_SERVICE_KEY or os.getenv("SUPABASE_SERVICE_KEY")
+        if not supabase_url or not key:
+            return {"error": "Supabase URL or service key not configured on server"}
+
+        headers = {
+            "apikey": key,
+            "Authorization": f"Bearer {key}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation",
+        }
+
+        payload = {
+            "name": req.name.strip(),
+            "email": req.email.strip(),
+            "password": req.password,
+            "usertype": req.usertype,
+        }
+
+        url = f"{supabase_url}/rest/v1/users_profile"
+        resp = requests.post(url, json=payload, headers=headers, timeout=8)
+        if resp.status_code not in (200, 201):
+            return {"error": "Supabase error creating user", "status": resp.status_code, "detail": resp.text}
+        data = resp.json()
+        if isinstance(data, list) and data:
+            user = data[0]
+        else:
+            user = data if isinstance(data, dict) else {}
+        # strip returned email and remove password
+        if 'email' in user and isinstance(user['email'], str):
+            user['email'] = user['email'].strip()
+        if 'password' in user:
+            user.pop('password', None)
+        return user
     except Exception as e:
         return {"error": str(e)}

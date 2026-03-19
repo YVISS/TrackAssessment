@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign Up</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <div class="login-container">
+        <div class="login-card">
+          <h1>Create account</h1>
+          <form id="signupForm" class="auth-form">
+            <label for="signupName">Full Name</label>
+            <input id="signupName" name="name" type="text" placeholder="Your full name" required />
+
+            <label for="signupEmail">Email</label>
+            <input id="signupEmail" name="email" type="email" placeholder="you@email.com" required />
+
+            <label for="signupPassword">Password</label>
+            <input id="signupPassword" name="password" type="password" placeholder="Choose a password" required />
+            <div style="margin-top:8px;">
+              <label style="font-size:14px;color:var(--muted);"><input id="signupShowPassword" type="checkbox" style="margin-right:8px;vertical-align:middle;"> Show password</label>
+            </div>
+
+            <div class="card-footer">
+              <div class="left"><a href="login.html">Back to Login</a></div>
+              <div class="right"></div>
+            </div>
+
+            <button type="submit" class="primary-btn">Create Account</button>
+          </form>
+          <p id="signupMessage" class="message" aria-live="polite"></p>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      const backendBase = `${location.protocol}//${location.hostname}:8000`;
+      function showMessage(msg){ document.getElementById('signupMessage').textContent = msg }
+
+      document.getElementById('signupForm').addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const name = (document.getElementById('signupName').value || '').trim();
+        const email = (document.getElementById('signupEmail').value || '').trim();
+        const password = (document.getElementById('signupPassword').value || '').trim();
+        if (!name || !email || !password) return showMessage('Please complete all fields');
+        showMessage('Creating account...');
+
+        try{
+          const url = `${backendBase}/signup`;
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ name, email, password, usertype: 'user' }),
+          });
+          const json = await res.json();
+          if (!res.ok){ showMessage(json.error || 'Signup failed'); return }
+          // Success — redirect to login
+          showMessage('Account created — redirecting to login...');
+          setTimeout(() => { window.location.href = 'login.html' }, 900);
+        }catch(err){
+          console.error('Signup error', err); showMessage('Signup error: ' + err.message);
+        }
+      });
+
+      // signup show password toggle
+      const sShow = document.getElementById('signupShowPassword');
+      if (sShow){
+        sShow.addEventListener('change', () => {
+          const p = document.getElementById('signupPassword');
+          if (p) p.type = sShow.checked ? 'text' : 'password';
+        });
+      }
+    </script>
+  </body>
+</html>

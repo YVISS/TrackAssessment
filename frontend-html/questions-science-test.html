@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Science Test — Questions</title>
+  <link rel="stylesheet" href="admin.css" />
+  <style>
+    .category-links a.category-link{display:block;margin-bottom:8px;padding:8px 10px;border-radius:8px;text-align:center;color:#0f172a;background:#f3f4f6;border:1px solid #e6e6e9;text-decoration:none;font-weight:600}
+    .category-links a.category-link.active{background:#eef2ff;color:#0f172a;border-color:transparent;box-shadow:none}
+  </style>
+</head>
+<body>
+  <script src="admin-header.v2.js"></script>
+  <script src="admin-modal.js"></script>
+  <div class="layout">
+    <main class="main-card" id="adminContent">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <h2 style="margin:0">Science Test</h2>
+        <div><button id="addQuestionBtn" class="btn-primary" aria-label="Add question">Add Question</button></div>
+      </div>
+      <div id="questionsMessage" class="muted" style="margin-bottom:12px"></div>
+      <div style="overflow:visible">
+        <table id="questionsTable">
+          <colgroup>
+            <col style="width:80px" />
+            <col style="width:40%" />
+            <col />
+            <col style="width:180px" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Question ID</th>
+              <th>Question</th>
+              <th>Long Text</th>
+              <th class="actions-header">Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const backendBase = `${location.protocol}//${location.hostname}:8000`;
+    function syncAccent(){ const hb = document.getElementById('adminHeaderBar'); if (!hb) return; document.documentElement.style.setProperty('--admin-header-height', hb.offsetHeight + 'px'); }
+    window.addEventListener('load', syncAccent); window.addEventListener('resize', ()=> setTimeout(syncAccent,50));
+
+    (function highlightCategory(){ const links = Array.from(document.querySelectorAll('.category-links a.category-link')); if (!links.length) return; const path = window.location.pathname.split('/').pop() || 'questions-science-test.html'; const normalized = (path === 'questions-science-test.html' || path === '') ? 'questions-science-test.html' : path; let matched = links.find(a => a.getAttribute('href') === normalized); if (!matched) matched = links[0]; matched.classList.add('active'); })();
+    
+
+    (async function loadQuestions(){
+      const msgEl = document.getElementById('questionsMessage');
+      const tbody = document.querySelector('#questionsTable tbody');
+      try{
+        msgEl.textContent = 'Loading questions…';
+        const res = await fetch(`${backendBase}/questions?category=${encodeURIComponent('Science Test')}`);
+        if (!res.ok){ msgEl.textContent = 'Failed to load questions: ' + res.status; return }
+        const data = await res.json(); if (!Array.isArray(data)){ msgEl.textContent = 'No data returned'; return }
+        msgEl.textContent = '';
+        tbody.innerHTML = '';
+        for (const row of data){
+          const qid = row.question_id || row.id || '';
+          const qtxt = row.question || row.question_text || '';
+          const opts = [row.opt_a, row.opt_b, row.opt_c, row.opt_d, row.opt_e].filter(Boolean);
+
+          const tr = document.createElement('tr');
+          const tdId = document.createElement('td'); tdId.textContent = qid; tr.appendChild(tdId);
+
+          const tdQ = document.createElement('td');
+          if (looksLikeUrl(qtxt)){
+            const urls = splitUrls(qtxt);
+            for (const u of urls){ const img = document.createElement('img'); img.className='qimg'; img.src=u; img.alt='question image'; tdQ.appendChild(img); }
+          } else { tdQ.textContent = qtxt }
+          tr.appendChild(tdQ);
+
+          const tdC = document.createElement('td'); tdC.className='choices-cell';
+          const choiceList = document.createElement('div'); choiceList.className='choice-list';
+          if (opts.length === 0){ choiceList.textContent=''; } else {
+            for (let i=0;i<opts.length;i++){ const val=opts[i]; if (looksLikeUrl(val)){ const urls=splitUrls(val); for(const u of urls){ const card=document.createElement('div'); card.className='choice-card'; const img=document.createElement('img'); img.className='choice-img'; img.src=u; img.alt=`choice ${i+1}`; card.appendChild(img); choiceList.appendChild(card); } } else { const card=document.createElement('div'); card.className='choice-card'; const span=document.createElement('div'); span.className='choice-text'; span.textContent=val; card.appendChild(span); choiceList.appendChild(card); } }
+          }
+          // Long text cell (from Table_Questions.long_text)
+          const tdLong = document.createElement('td');
+          tdLong.className = 'longtext-cell';
+          tdLong.textContent = row.long_text || row.longtext || '';
+          tr.appendChild(tdLong);
+
+          const tdActions = document.createElement('td'); tdActions.className='actions-cell';
+          const editBtn = document.createElement('button'); editBtn.className='icon-btn edit-btn'; editBtn.title='Edit'; editBtn.innerHTML='✏️'; editBtn.addEventListener('click', ()=> openModal('edit', row));
+          const deleteBtn = document.createElement('button'); deleteBtn.className='icon-btn delete-btn'; deleteBtn.title='Delete'; deleteBtn.innerHTML='🗑️'; deleteBtn.addEventListener('click', async ()=>{ const idPart = row.id ? ` (internal id: ${row.id})` : ''; if (!confirm(`Delete question ${qid}${idPart} — are you sure?`)) return; try{ const delRes = await fetch(`${backendBase}/questions/${encodeURIComponent(row.id)}?category=${encodeURIComponent('Science Test')}`, { method: 'DELETE' }); if (!delRes.ok){ alert('Delete failed: ' + delRes.status); return; } tbody.removeChild(tr); }catch(e){ console.error(e); alert('Delete error'); } });
+          tdActions.appendChild(editBtn); tdActions.appendChild(deleteBtn); tr.appendChild(tdActions);
+
+          tbody.appendChild(tr);
+        }
+      }catch(e){ msgEl.textContent='Error loading questions'; console.error(e); }
+    })();
+
+    function openModal(mode, row){ let existing = document.getElementById('qaModal'); if (existing) existing.remove(); const wrapper = document.createElement('div'); wrapper.className='qa-modal'; wrapper.id='qaModal'; const panel = document.createElement('div'); panel.className='panel'; panel.innerHTML = `
+        <h3>${mode==='add'?'Add Question':'Edit Question'}</h3>
+        <div class="row"><input id="qa_question" placeholder="Question text or image URL" /></div>
+        <div class="row"><input id="qa_opt_a" placeholder="Option A" /><input id="qa_opt_b" placeholder="Option B" /></div>
+        <div class="row"><input id="qa_opt_c" placeholder="Option C" /><input id="qa_opt_d" placeholder="Option D" /></div>
+        <div class="row"><input id="qa_opt_e" placeholder="Option E (optional)" /></div>
+        <div class="actions"><button id="qaCancel">Cancel</button><button id="qaSave" class="btn-primary">Save</button></div>
+      `; wrapper.appendChild(panel); document.body.appendChild(wrapper);
+      if (window.updateModalViewButtons) updateModalViewButtons(wrapper);
+      if (mode==='edit' && row){ document.getElementById('qa_question').value=row.question||''; document.getElementById('qa_opt_a').value=row.opt_a||''; document.getElementById('qa_opt_b').value=row.opt_b||''; document.getElementById('qa_opt_c').value=row.opt_c||''; document.getElementById('qa_opt_d').value=row.opt_d||''; document.getElementById('qa_opt_e').value=row.opt_e||''; }
+      document.getElementById('qaCancel').addEventListener('click', ()=> wrapper.remove());
+      document.getElementById('qaSave').addEventListener('click', async ()=>{
+        const payload={ question: document.getElementById('qa_question').value, opt_a: document.getElementById('qa_opt_a').value, opt_b: document.getElementById('qa_opt_b').value, opt_c: document.getElementById('qa_opt_c').value, opt_d: document.getElementById('qa_opt_d').value, opt_e: document.getElementById('qa_opt_e').value||null };
+        try{ if (mode==='add'){ const r = await fetch(`${backendBase}/questions?category=${encodeURIComponent('Science Test')}`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) }); if (!r.ok){ alert('Create failed: '+r.status); return;} location.reload(); } else { const r = await fetch(`${backendBase}/questions/${encodeURIComponent(row.id)}?category=${encodeURIComponent('Science Test')}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) }); if (!r.ok){ alert('Update failed: '+r.status); return; } location.reload(); } }catch(e){ console.error(e); alert('Save error'); }
+      });
+    }
+    document.getElementById('addQuestionBtn').addEventListener('click', ()=> openModal('add'));
+
+    function looksLikeUrl(s){ if (!s) return false; return /https?:\/\//i.test(s); }
+    function splitUrls(s){ if (!s) return []; return s.split(/\s+|\|,|,\s*/).map(x=>x.trim()).filter(x=>x.length && /https?:\/\//i.test(x)); }
+  </script>
+</body>
+</html>

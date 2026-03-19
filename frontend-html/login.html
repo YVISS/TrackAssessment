@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="loadingScreen" style="display:none;position:fixed;z-index:9999;top:0;left:0;width:100vw;height:100vh;background:#0a1629;align-items:center;justify-content:center;color:#fff;font-size:2rem;">Loading...</div>
+    <main class="page">
+      <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+      <div class="login-container">
+        <div class="login-card" id="authView">
+          <h1>Login</h1>
+
+          <form id="loginForm" class="auth-form">
+            <label for="loginEmail">Email</label>
+            <input id="loginEmail" name="email" type="email" placeholder="your@email.com" required />
+
+            <label for="loginPassword">Password</label>
+            <input id="loginPassword" name="password" type="password" placeholder="Password" required />
+            <div style="margin-top:8px;">
+              <label style="font-size:14px;color:var(--muted);"><input id="showPassword" type="checkbox" style="margin-right:8px;vertical-align:middle;"> Show password</label>
+            </div>
+
+            <div class="card-footer">
+              <div class="left"><button id="forgotToggleBtn" type="button" class="link-btn">Forgot password?</button></div>
+              <div class="right"><a href="sign-up.html" id="showSignupBtn">Sign Up</a></div>
+            </div>
+
+            <button type="submit" class="primary-btn">Sign In</button>
+          </form>
+
+          <p id="authMessage" class="message" aria-live="polite"></p>
+        </div>
+      </div>
+
+      <div id="logoutModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="logoutModalTitle">
+        <div class="modal-card">
+          <h3 id="logoutModalTitle">Are you sure you want to logout?</h3>
+          <div class="modal-actions">
+            <button id="confirmLogoutBtn" class="danger-btn" type="button">Yes</button>
+            <button id="cancelLogoutBtn" class="secondary-btn" type="button">No</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      const backendBase = `${location.protocol}//${location.hostname}:8000`;
+      function showMessage(msg){ document.getElementById('authMessage').textContent = msg }
+
+      async function authWithPassword(email, password){
+        try{
+          const url = `${backendBase}/auth`;
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ email, password }),
+          });
+          if (!res.ok){
+            const t = await res.text();
+            throw new Error(`${res.status} ${res.statusText} - ${t}`);
+          }
+          const json = await res.json();
+          return json;
+        }catch(err){ console.error('Auth failed', err); return { error: err.message } }
+      }
+
+      window.addEventListener('load', () => { const e = document.getElementById('loginEmail'); if (e) e.focus(); });
+
+      document.getElementById('loginForm').addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const email = document.getElementById('loginEmail').value.trim();
+        const password = document.getElementById('loginPassword').value || '';
+        if (!email || !password) return showMessage('Please enter email and password.');
+        showMessage('Authenticating...');
+
+        const res = await authWithPassword(email, password);
+        if (!res || res.error){
+          showMessage('Login failed: ' + (res && res.error ? res.error : 'invalid credentials'));
+          return;
+        }
+
+        const user = res.user || res;
+
+        // Fetch authoritative profile row from backend -> Supabase `users_profile` table
+        let profile = {};
+        try{
+          const purl = `${backendBase}/user-profile?email=${encodeURIComponent(email)}`;
+          const pres = await fetch(purl, { headers: { Accept: 'application/json' } });
+          if (pres.ok){
+            const pj = await pres.json();
+            if (pj && !pj.error && Object.keys(pj).length) profile = pj;
+          }
+        }catch(e){ console.warn('Failed to fetch user profile', e); }
+
+        // prefer profile.usertype if available, otherwise fall back to any returned user fields
+        const usertype = ((profile.usertype || profile.user_type) || (user.usertype || user.user_type || user.type) || 'user').toLowerCase();
+
+        sessionStorage.setItem('user_email', email);
+        sessionStorage.setItem('user_profile', JSON.stringify(profile && Object.keys(profile).length ? profile : user));
+
+        if (usertype === 'admin'){
+          window.location.href = 'questions-all.html';
+          return;
+        }
+
+        window.location.href = 'index(Alondra).html';
+      });
+
+      // Show/hide password toggle
+      const showPw = document.getElementById('showPassword');
+      if (showPw){
+        showPw.addEventListener('change', () => {
+          const p = document.getElementById('loginPassword');
+          if (p) p.type = showPw.checked ? 'text' : 'password';
+        });
+      }
+    </script>
+  </body>
+</html>

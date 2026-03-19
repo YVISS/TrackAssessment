@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>User Dashboard — TrackAssessment</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    :root{--bg:#071025;--card:#0f2733;--muted:#9fb0c2;--accent:#0aa3ff}
+    body{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:24px;color:#e6f0f6;background:linear-gradient(180deg,#061021,#071026)}
+    header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+    header h1{margin:0}
+    .card{padding:16px;background:var(--card);border-radius:10px;color:#d9eef8}
+    .actions{display:flex;gap:8px}
+    .layout{display:flex;gap:16px}
+    .sidebar{width:260px}
+    .main-area{flex:1;min-height:420px}
+    .nav-btn{display:block;width:100%;text-align:left;padding:8px 10px;border-radius:6px;border:none;background:transparent;color:var(--muted);cursor:pointer}
+    .nav-btn:hover{background:rgba(255,255,255,0.02);color:#fff}
+    #mainPlaceholder{color:var(--muted);padding:12px}
+    table{width:100%;border-collapse:collapse;color:#dceff9}
+    table th,table td{padding:10px;border-bottom:1px solid rgba(255,255,255,0.03);text-align:left}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>User Dashboard</h1>
+    <div class="actions">
+      <button id="backBtn">Back to Site</button>
+      <button id="signOutBtn">Sign out</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar card">
+      <nav>
+        <ul style="list-style:none;padding:0;margin:0;">
+          <li><button class="nav-btn" id="navUsers">User table</button></li>
+          <li style="margin-top:12px">
+            <label for="catSelect" style="font-weight:600;display:block;margin-bottom:6px">Category</label>
+            <select id="catSelect" style="width:100%;padding:8px;border-radius:6px;background:#fff;color:#000">
+              <option value="">-- choose category --</option>
+              <option>Verbal Ability</option>
+              <option>Numerical Ability</option>
+              <option>Science Test</option>
+              <option>Clerical Ability</option>
+              <option>Interpersonal Skills Test</option>
+              <option>Logical Reasoning</option>
+              <option>Entrepreneurship Test</option>
+              <option>Mechanical Ability</option>
+            </select>
+          </li>
+          <li style="margin-top:12px"><button class="nav-btn" id="navSubmissions">Submissions</button></li>
+          <li style="margin-top:12px"><button class="nav-btn" id="navLogs">Logs</button></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main class="main-area card" id="mainArea">
+      <div id="mainPlaceholder">Select an item from the sidebar to view content.</div>
+    </main>
+  </div>
+
+  <script>
+    const profileRaw = sessionStorage.getItem('user_profile');
+    if (!profileRaw){
+      // not logged in — go back to login
+      window.location.href = 'index.html';
+    }
+    const profile = JSON.parse(profileRaw || '{}');
+    document.getElementById('userWelcome').textContent = `Hello ${profile.full_name || profile.name || profile.email || ''}`;
+    document.getElementById('profileInfo').innerHTML = `<p><strong>Email:</strong> ${escapeHtml(profile.email||'')}</p><p><strong>Usertype:</strong> ${escapeHtml(profile.usertype||profile.type||'user')}</p>`;
+
+    document.getElementById('backBtn').addEventListener('click', ()=> window.location.href='index.html');
+    document.getElementById('signOutBtn').addEventListener('click', ()=> { sessionStorage.removeItem('user_profile'); sessionStorage.removeItem('user_email'); window.location.href='index.html'; });
+
+    function escapeHtml(s){ if(!s) return ''; return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+
+    const backendBase = `${location.protocol}//${location.hostname}:8000`;
+    const usersBtn = document.getElementById('navUsers');
+    const catSelect = document.getElementById('catSelect');
+    const subBtn = document.getElementById('navSubmissions');
+    const logsBtn = document.getElementById('navLogs');
+    const mainArea = document.getElementById('mainArea');
+
+    usersBtn.addEventListener('click', async () => {
+      mainArea.innerHTML = '<div id="mainPlaceholder">Loading users…</div>';
+      try{
+        const res = await fetch(`${backendBase}/users`, { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        const rows = Array.isArray(data) ? data : (data.value || data);
+        if (!rows || rows.length === 0) { mainArea.innerHTML = '<div id="mainPlaceholder">No users found.</div>'; return }
+        const table = document.createElement('table');
+        const thead = document.createElement('thead'); thead.innerHTML = '<tr><th>Email</th><th>Usertype</th><th>Name</th></tr>';
+        const tbody = document.createElement('tbody');
+        rows.forEach(r => {
+          const tr = document.createElement('tr');
+          const email = (r.email || '').toString().trim();
+          tr.innerHTML = `<td>${escapeHtml(email)}</td><td>${escapeHtml(r.usertype||'')}</td><td>${escapeHtml(r.name||'')}</td>`;
+          tbody.appendChild(tr);
+        });
+        table.appendChild(thead); table.appendChild(tbody);
+        mainArea.innerHTML = '';
+        mainArea.appendChild(table);
+      }catch(err){ mainArea.innerHTML = `<div id="mainPlaceholder">Failed to load users: ${escapeHtml(err.message)}</div>` }
+    });
+
+    catSelect.addEventListener('change', () => {
+      const v = catSelect.value;
+      if (!v){ mainArea.innerHTML = '<div id="mainPlaceholder">No category selected.</div>'; return }
+      mainArea.innerHTML = `<div id="mainPlaceholder">Selected category: <strong>${escapeHtml(v)}</strong><br/>You can load submissions for this category here.</div>`;
+    });
+
+    subBtn.addEventListener('click', () => {
+      mainArea.innerHTML = '<div id="mainPlaceholder">Loading submissions…</div>';
+      (async function(){
+        try{
+          const res = await fetch(`${backendBase}/submissions?limit=200`, { headers: { 'Accept': 'application/json' } });
+          if (!res.ok) throw new Error(await res.text());
+          const rows = await res.json();
+          const data = Array.isArray(rows) ? rows : (rows.value || rows);
+          if (!data || data.length === 0){ mainArea.innerHTML = '<div id="mainPlaceholder">No submissions found.</div>'; return }
+          // Build table with common columns
+          const tbl = document.createElement('table');
+          const thead = document.createElement('thead');
+          thead.innerHTML = '<tr><th>ID</th><th>User ID</th><th>Submitted At</th><th>Verbal</th><th>Numerical</th><th>Science</th><th>Clerical</th><th>Interpersonal</th><th>Logical</th><th>Entrepreneurship</th><th>Mechanical</th></tr>';
+          const tbody = document.createElement('tbody');
+          data.forEach(r => {
+            const tr = document.createElement('tr');
+            const id = r.id || r.result_id || '';
+            tr.innerHTML = `<td>${escapeHtml(id)}</td><td>${escapeHtml(r.user_id||'')}</td><td>${escapeHtml(r.submitted_at||r.created_at||'')}</td>` +
+              `<td>${escapeHtml(r.verbal_ability||r.VerbalAbility||'')}</td><td>${escapeHtml(r.numerical_ability||'')}</td><td>${escapeHtml(r.science_test||'')}</td>` +
+              `<td>${escapeHtml(r.clerical_ability||'')}</td><td>${escapeHtml(r.interpersonal_skills_test||'')}</td><td>${escapeHtml(r.logical_reasoning||'')}</td>` +
+              `<td>${escapeHtml(r.entrepreneurship_test||'')}</td><td>${escapeHtml(r.mechanical_ability||'')}</td>`;
+            tbody.appendChild(tr);
+          });
+          tbl.appendChild(thead); tbl.appendChild(tbody);
+          mainArea.innerHTML = '';
+          mainArea.appendChild(tbl);
+        }catch(err){ mainArea.innerHTML = `<div id="mainPlaceholder">Failed to load submissions: ${escapeHtml(err.message)}</div>` }
+      })();
+    });
+
+    logsBtn.addEventListener('click', () => {
+      mainArea.innerHTML = '<div id="mainPlaceholder">Logs view (not implemented)</div>';
+    });
+  </script>
+</body>
+</html>

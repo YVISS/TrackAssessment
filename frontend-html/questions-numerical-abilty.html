@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Numerical Ability — Questions</title>
+</head>
+<style>
+  /* Thumbnails for option previews */
+  .opt-preview { width:80px; height:80px; object-fit:cover; border-radius:6px; margin-left:8px; border:1px solid #e6e6e9 }
+  /* Simple confirmation modal */
+  .confirm-overlay{position:fixed;inset:0;background:rgba(2,6,23,0.4);display:flex;align-items:center;justify-content:center;z-index:1200}
+  .confirm-dialog{background:#fff;padding:18px 20px;border-radius:10px;box-shadow:0 8px 30px rgba(2,6,23,0.12);max-width:420px;width:92%;}
+  .confirm-dialog p{margin:0 0 12px;color:#0f172a}
+  .confirm-actions{display:flex;gap:8px;justify-content:flex-end}
+  .confirm-actions .btn-cancel{background:#eef2ff;border:1px solid #e6eefa;padding:6px 12px;border-radius:6px}
+  .confirm-actions .btn-yes{background:#0ea5a4;color:#fff;border:none;padding:6px 12px;border-radius:6px}
+  </style>
+  <link rel="stylesheet" href="admin.css" />
+</head>
+<body>
+  <script src="admin-header.v2.js"></script>
+  <script src="admin-modal.js"></script>
+
+  <div class="layout">
+    <main class="main-card" id="adminContent">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <h2 style="margin:0">Numerical Ability</h2>
+        <div><button id="refreshQuestionsBtn" class="btn-primary" style="margin-right: 8px;">Refresh</button>
+        <button id="addQuestionBtn" class="btn-primary">Add Question</button>
+        </div>
+      </div>
+      <div id="questionsMessage" class="muted" style="margin-bottom:12px"></div>
+      <div style="overflow:visible">
+        <table id="questionsTable">
+          <colgroup>
+            <col style="width:80px" />
+            <col style="width:40%" />
+            <col />
+            <col style="width:180px" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Question ID</th>
+              <th>Question</th>
+              <th>Long Text</th>
+              <th class="actions-header">Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const backendBase = `${location.protocol}//${location.hostname}:8000`;
+    // Force refresh button gradient inline to override other styles/cache
+    try{
+      const _btn = document.getElementById('refreshQuestionsBtn');
+      if (_btn){
+        _btn.style.background = 'linear-gradient(90deg,#7c3aed 0%, #b5a8ff 40%, #ffffff 100%)';
+        _btn.style.color = '#07203a';
+        _btn.style.border = '1px solid rgba(124,58,237,0.18)';
+        _btn.style.boxShadow = '0 6px 18px rgba(124,58,237,0.12)';
+      }
+    }catch(e){/* ignore */}
+    function syncAccent(){ const hb = document.getElementById('adminHeaderBar'); if (!hb) return; document.documentElement.style.setProperty('--admin-header-height', hb.offsetHeight + 'px'); }
+    window.addEventListener('load', syncAccent); window.addEventListener('resize', ()=> setTimeout(syncAccent,50));
+
+    (function highlightCategory(){ const links = Array.from(document.querySelectorAll('.category-links a.category-link')); if (!links.length) return; const path = window.location.pathname.split('/').pop() || 'questions-numerical-abilty.html'; const normalized = (path === 'questions-numerical-abilty.html' || path === '') ? 'questions-numerical-abilty.html' : path; let matched = links.find(a => a.getAttribute('href') === normalized); if (!matched) matched = links[0]; matched.classList.add('active'); })();
+
+    (async function loadQuestions(){
+      const msgEl = document.getElementById('questionsMessage'); const tbody = document.querySelector('#questionsTable tbody');
+      try{
+        msgEl.textContent = 'Loading questions…';
+        const res = await fetch(`${backendBase}/questions?category=${encodeURIComponent('Numerical Ability')}`);
+        if (!res.ok){ msgEl.textContent = 'Failed to load questions: ' + res.status; return }
+        const data = await res.json(); if (!Array.isArray(data)){ msgEl.textContent = 'No data returned'; return; }
+        msgEl.textContent = ''; tbody.innerHTML = '';
+        if (data.length === 0){
+          const trEmpty = document.createElement('tr');
+          const td = document.createElement('td');
+          td.colSpan = 4;
+          td.className = 'muted';
+          td.textContent = 'No questions available';
+          trEmpty.appendChild(td);
+          tbody.appendChild(trEmpty);
+          return;
+        }
+        for (const row of data){
+          const qid = row.question_id || row.id || '';
+          const qtxt = row.question || row.question_text || '';
+          const opts = [row.opt_a, row.opt_b, row.opt_c, row.opt_d, row.opt_e];
+          const tr = document.createElement('tr');
+          const tdId = document.createElement('td'); tdId.textContent = qid; tr.appendChild(tdId);
+          const tdQ = document.createElement('td');
+          if (looksLikeUrl(qtxt)){
+            const urls = splitUrls(qtxt);
+            for (const u of urls){ const img = document.createElement('img'); img.className='qimg'; img.src=u; img.alt='question image'; tdQ.appendChild(img); }
+          } else tdQ.textContent = qtxt;
+          tr.appendChild(tdQ);
+
+          const tdLong = document.createElement('td');
+          tdLong.className = 'longtext-cell';
+          tdLong.textContent = row.long_text || row.longtext || '';
+          tr.appendChild(tdLong);
+
+          // (Choices column removed) -- options still fetched but not shown in table
+
+          const tdActions = document.createElement('td'); tdActions.className='actions-cell';
+          const editBtn=document.createElement('button'); editBtn.className='icon-btn edit-btn'; editBtn.title='Edit'; editBtn.innerHTML='✏️'; editBtn.addEventListener('click', ()=> openModal('edit', row));
+          const deleteBtn=document.createElement('button'); deleteBtn.className='icon-btn delete-btn'; deleteBtn.title='Delete'; deleteBtn.innerHTML='🗑️';
+          deleteBtn.addEventListener('click', ()=>{
+            const idPart = row.id ? ` (internal id: ${row.id})` : '';
+            const message = `Are you sure you want to delete question ${qid}${idPart}?`;
+            showDeleteConfirm(message, async ()=>{
+              try{
+                const deleteKey = (row.question_id && String(row.question_id).trim()) || (row.id && String(row.id).trim());
+                if (!deleteKey){ alert('Cannot determine which row to delete (missing id/question_id)'); return; }
+                const url = `${backendBase}/questions/${encodeURIComponent(deleteKey)}?category=${encodeURIComponent('Numerical Ability')}`;
+                console.log('DELETE', url);
+                const delRes = await fetch(url, { method:'DELETE' });
+                if (!delRes.ok){ let bodyText = ''; try{ bodyText = await delRes.text(); }catch(e){ bodyText = '<could not read body>'; } console.error('Delete failed', delRes.status, bodyText); alert('Delete failed: '+delRes.status + '\n' + bodyText); return; }
+                tbody.removeChild(tr);
+              }catch(e){ console.error(e); alert('Delete error'); }
+            });
+          });
+          tdActions.appendChild(editBtn); tdActions.appendChild(deleteBtn); tr.appendChild(tdActions);
+          tbody.appendChild(tr);
+        }
+      }catch(e){ msgEl.textContent='Error loading questions'; console.error(e); }
+    })();
+
+    async function openModal(mode, row){
+      // remove existing
+      let existing=document.getElementById('qaModal'); if (existing) existing.remove();
+      // fetch modal fragment and insert
+      try{
+        const modalUrl = new URL('add-question-modal.html', location.href).toString();
+        console.log('loading modal from', modalUrl);
+        let res = null;
+        try{ res = await fetch(modalUrl); }catch(err){ console.warn('fetch error', modalUrl, err); res = null; }
+        if (!res || !res.ok){
+          const rootUrl = `${location.origin}/add-question-modal.html`;
+          console.log('modal fetch failed, trying root URL', rootUrl);
+          try{ res = await fetch(rootUrl); }catch(err){ console.warn('fetch error', rootUrl, err); res = null; }
+        }
+        if (!res || !res.ok){ const code = res ? res.status : 'network-error'; throw new Error('Failed to load modal (' + code + ')'); }
+        const html = await res.text();
+        const wrapper = document.createElement('div'); wrapper.innerHTML = html; document.body.appendChild(wrapper);
+        const modalEl = document.getElementById('qaModal'); if (!modalEl) throw new Error('Modal not found in fragment');
+        modalEl.style.display = 'block';
+
+        // initialize modal contents and wiring
+        function initializeQuestionModal(modalEl, mode, row){
+          const title = modalEl.querySelector('#qaModalTitle'); if (title) title.textContent = mode === 'add' ? 'Add Question' : 'Edit Question';
+          const fields = ['qa_question','qa_opt_a','qa_opt_b','qa_opt_c','qa_opt_d','qa_opt_e'];
+          if (mode === 'edit' && row){
+            document.getElementById('qa_question').value = row.question || '';
+            document.getElementById('qa_long_text').value = row.long_text || row.longtext || '';
+            document.getElementById('qa_opt_a').value = row.opt_a || '';
+            document.getElementById('qa_opt_b').value = row.opt_b || '';
+            document.getElementById('qa_opt_c').value = row.opt_c || '';
+            document.getElementById('qa_opt_d').value = row.opt_d || '';
+            document.getElementById('qa_opt_e').value = row.opt_e || '';
+            const correctSel = document.getElementById('qa_correct_answer');
+            if (correctSel) correctSel.value = row.correct_answer || row.answer || row.correct || '';
+            const map = {qa_opt_a_preview: row.opt_a, qa_opt_b_preview: row.opt_b, qa_opt_c_preview: row.opt_c, qa_opt_d_preview: row.opt_d, qa_opt_e_preview: row.opt_e};
+            for (const id in map){ const el = document.getElementById(id); if (el) el.src = looksLikeUrl(map[id]) ? map[id] : ''; }
+          }
+
+          // live preview wiring
+          for (const name of fields.slice(1)){
+            const inp = document.getElementById(name);
+            const prev = document.getElementById(name + '_preview');
+            const viewBtn = document.getElementById(name + '_view');
+            if (!inp || !prev) continue;
+            inp.addEventListener('input', ()=>{
+              const v = inp.value.trim();
+              prev.src = looksLikeUrl(v)? v : '';
+              prev.style.display = prev.src ? 'inline-block' : 'none';
+              if (viewBtn){ viewBtn.disabled = !prev.src; }
+            });
+            prev.style.display = prev.src ? 'inline-block' : 'none';
+            if (viewBtn){ viewBtn.disabled = !prev.src; }
+          }
+
+            // file browse for Option A: show local preview when user picks a file
+            const fileA = document.getElementById('qa_opt_a_file');
+            const prevA = document.getElementById('qa_opt_a_preview');
+            const viewA = document.getElementById('qa_opt_a_view');
+            if (fileA && prevA){
+              fileA.addEventListener('change', (evt)=>{
+                const f = fileA.files && fileA.files[0];
+                if (!f) return;
+                const reader = new FileReader();
+                reader.onload = (e) => { prevA.src = e.target.result; prevA.style.display = 'inline-block'; if (window.updateModalViewButtons) updateModalViewButtons(modalEl); };
+                reader.readAsDataURL(f);
+              });
+            }
+            if (viewA){
+              viewA.addEventListener('click', ()=>{ if (prevA && prevA.src) window.open(prevA.src, '_blank'); });
+              viewA.disabled = !(prevA && prevA.src);
+            }
+
+          // cancel/save
+          const cancelBtn = modalEl.querySelector('#qaCancel'); if (cancelBtn) cancelBtn.addEventListener('click', ()=> modalEl.remove());
+          const saveBtn = modalEl.querySelector('#qaSave'); if (saveBtn) saveBtn.addEventListener('click', async ()=>{
+            const correctSel = document.getElementById('qa_correct_answer');
+            const correctErr = document.getElementById('qa_correct_error');
+            if (correctErr) correctErr.style.display = 'none';
+            if (correctSel && !correctSel.value){
+              if (correctErr){ correctErr.textContent = 'Select a correct answer'; correctErr.style.display = 'block'; }
+              else alert('Select a correct answer');
+              return;
+            }
+            const payload = {
+              question: document.getElementById('qa_question').value,
+              long_text: document.getElementById('qa_long_text') ? document.getElementById('qa_long_text').value : null,
+              opt_a: document.getElementById('qa_opt_a').value,
+              opt_b: document.getElementById('qa_opt_b').value,
+              opt_c: document.getElementById('qa_opt_c').value,
+              opt_d: document.getElementById('qa_opt_d').value,
+              opt_e: document.getElementById('qa_opt_e').value || null,
+              answer: (document.getElementById('qa_correct_answer') && document.getElementById('qa_correct_answer').value) || null
+            };
+            try{
+              if (mode === 'add'){
+                const r = await fetch(`${backendBase}/questions?category=${encodeURIComponent('Numerical Ability')}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+                if (!r.ok){ alert('Create failed: '+r.status); return; }
+                location.reload();
+              } else {
+                const r = await fetch(`${backendBase}/questions/${encodeURIComponent(row.id)}?category=${encodeURIComponent('Numerical Ability')}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+                if (!r.ok){ alert('Update failed: '+r.status); return; }
+                location.reload();
+              }
+            }catch(e){ console.error(e); alert('Save error'); }
+          });
+          // clear inline error when user selects an answer
+          const correctSelOn = modalEl.querySelector('#qa_correct_answer');
+          if (correctSelOn){ const correctErrOn = modalEl.querySelector('#qa_correct_error'); correctSelOn.addEventListener('change', ()=>{ if (correctErrOn) correctErrOn.style.display = 'none'; }); }
+        }
+
+        // call initializer
+        initializeQuestionModal(modalEl, mode, row);
+        if (window.updateModalViewButtons) updateModalViewButtons(modalEl);
+
+      }catch(e){ console.error('openModal error', e); alert('Could not open modal: ' + (e && e.message ? e.message : String(e))); }
+    }
+    document.getElementById('addQuestionBtn').addEventListener('click', ()=> openModal('add'));
+
+    // Small helper: escape HTML and show a Yes/No confirmation modal. Calls onYes() when confirmed.
+    function escapeHtml(s){ if (s === null || typeof s === 'undefined') return ''; return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[c]); }
+    function showDeleteConfirm(message, onYes){
+      // remove existing
+      const existing = document.getElementById('confirmOverlay'); if (existing) existing.remove();
+      const overlay = document.createElement('div'); overlay.id='confirmOverlay'; overlay.className='confirm-overlay';
+      const dlg = document.createElement('div'); dlg.className='confirm-dialog';
+      dlg.innerHTML = `<p>${escapeHtml(message)}</p>`;
+      const actions = document.createElement('div'); actions.className='confirm-actions';
+      const btnCancel = document.createElement('button'); btnCancel.className='btn-cancel'; btnCancel.textContent='No';
+      const btnYes = document.createElement('button'); btnYes.className='btn-yes'; btnYes.textContent='Yes';
+      actions.appendChild(btnCancel); actions.appendChild(btnYes); dlg.appendChild(actions); overlay.appendChild(dlg); document.body.appendChild(overlay);
+      function cleanup(){ try{ overlay.remove(); }catch(e){} }
+      btnCancel.addEventListener('click', ()=> cleanup());
+      overlay.addEventListener('click', (e)=>{ if (e.target === overlay) cleanup(); });
+      btnYes.addEventListener('click', ()=>{ cleanup(); try{ onYes(); }catch(e){ console.error(e); } });
+    }
+
+    function looksLikeUrl(s){ if (!s) return false; return /https?:\/\//i.test(s); }
+    function splitUrls(s){ if (!s) return []; return s.split(/\s+|\|,|,\s*/).map(x=>x.trim()).filter(x=>x.length && /https?:\/\//i.test(x)); }
+  </script>
+</body>
+</html>
