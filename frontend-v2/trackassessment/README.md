@@ -69,5 +69,5 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
-> **Production note:** Set `NEXT_PUBLIC_BACKEND_URL` to your production backend URL. On the backend, set the `ALLOWED_ORIGINS` environment variable to a comma-separated list of allowed frontend origins (e.g. `https://your-frontend.vercel.app`).
+> **Production note:** Set `NEXT_PUBLIC_BACKEND_URL` to your production backend URL. For local development you can use `http://127.0.0.1:8000` and set `ALLOWED_ORIGINS` on the backend to include `http://localhost:3000` (or `http://127.0.0.1:3000`). For production add your deployed frontend origins.
 

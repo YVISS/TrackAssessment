@@ -1,0 +1,283 @@
+/* Admin dashboard styles extracted from admin-dashboard.html */
+body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:24px;color:#0f172a}
+header{display:flex;justify-content:space-between;align-items:center}
+.card{margin-top:12px}
+.actions{display:flex;gap:8px}
+
+/* layout */
+.layout{display:flex;gap:24px;align-items:flex-start}
+@media (max-width:800px){ .layout{flex-direction:column} }
+
+/* sidebar visual separation */
+/* accent bar: match sidebar card height (shorter) and align with sidebar; height synced by JS */
+.accent-bar{width:12px;border-radius:8px;background:linear-gradient(180deg,#7c3aed,#06b6d4);align-self:flex-start;margin-top:12px;height:auto}
+.sidebar{min-width:260px;max-width:320px}
+/* make the sidebar box shorter (not full viewport height) */
+.sidebar.card{background:#ffffff;padding:18px;border-radius:8px;border:1px solid #e6e6e9;box-shadow:0 1px 4px rgba(16,24,40,0.03);display:flex;flex-direction:column;max-height:none;z-index:9999}
+.sidebar .admin-tools{display:flex;flex-direction:column;gap:8px;flex:1}
+.signout-wrapper{margin-top:auto}
+.signout-icon{background:transparent;border:0;cursor:pointer;width:40px;height:40px;padding:6px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center}
+.sidebar .admin-tools button, .sidebar select{width:100%}
+.sidebar{position:sticky;top:24px;align-self:flex-start;pointer-events:auto}
+
+/* Desktop: keep sidebar in normal flow but sticky so it follows vertically only */
+@media (min-width:901px){
+	:root{--admin-sidebar-left:24px;--admin-sidebar-width:300px;--admin-sidebar-top:24px;--admin-sidebar-height:auto}
+	.sidebar.card{
+		position:sticky !important;
+		top:var(--admin-sidebar-top) !important;
+		width:var(--admin-sidebar-width) !important;
+		max-height:var(--admin-sidebar-height) !important;
+		overflow:auto !important;
+		z-index:9999 !important;
+		align-self:flex-start;
+	}
+	.accent-bar{
+		position:sticky !important;
+		top:var(--admin-sidebar-top) !important;
+		height:var(--admin-sidebar-height) !important;
+		align-self:flex-start;
+		z-index:9998 !important;
+	}
+	.main-card{margin-left:calc(var(--admin-sidebar-left) + var(--admin-sidebar-width) + 24px) !important}
+}
+
+/* Desktop: fallback to a precise fixed sidebar that follows the viewport reliably */
+@media (min-width:901px){
+	.sidebar.card.fixed-desktop{
+		position:fixed !important;
+		top:24px;
+		width:300px;
+		max-height:calc(100vh - 48px);
+		overflow:auto;
+	}
+	.accent-bar.fixed-desktop{
+		position:fixed !important;
+		top:24px;
+		width:12px;
+		height:calc(100vh - 48px);
+	}
+	.main-card.with-fixed-sidebar{margin-left:360px}
+}
+
+/* Make sure sidebar buttons are always on top and clickable */
+.sidebar .admin-tools button{position:relative;z-index:10000;cursor:pointer}
+
+/* Ensure accent bar does not intercept pointer events */
+.accent-bar{pointer-events:none}
+
+/* Make main content sit below sidebar for pointer stacking */
+.main-card{position:relative;z-index:1}
+
+/* main content card */
+.main-card{flex:1;background:#f8fafc;padding:18px;border-radius:8px}
+#adminContent table{width:100%;border-collapse:collapse;table-layout:fixed}
+#adminContent th{padding:18px 12px;text-align:left;color:#0b1724}
+#adminContent td{padding:14px 12px;border-top:1px solid rgba(0,0,0,0.06)}
+
+/* Vertically and horizontally center the Question column content */
+#adminContent th:nth-child(2), #adminContent td:nth-child(2){
+	vertical-align:middle;
+	text-align:center;
+	display:flex;
+	align-items:center;
+	justify-content:center;
+}
+
+/* add extra horizontal separation between Question ID and Question columns */
+#adminContent th:nth-child(1), #adminContent td:nth-child(1){padding-left:24px;padding-right:12px}
+#adminContent thead th:nth-child(2){padding-left:0}
+#adminContent td:nth-child(2){padding-left:0}
+/* Make question text wrap nicely when centered */
+#adminContent td:nth-child(2){white-space:normal;word-break:break-word}
+
+/* Long text column styling */
+/* Long text column styling */
+#adminContent thead th:nth-child(3), #adminContent td.longtext-cell{
+	color:#334155;
+	padding:12px 16px;
+	white-space:normal;
+	word-break:break-word;
+	max-width:640px;
+	text-align:center;
+	vertical-align:middle;
+}
+
+/* Choices cell: horizontal list of choice cards (left-right scroller) */
+.choices-cell{display:block}
+.choice-list{display:grid;grid-template-columns:repeat(5,1fr);gap:18px;align-items:start;padding:8px 0;min-width:0;width:100%}
+.choice-list::-webkit-scrollbar{height:8px}
+.choice-list::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.06);border-radius:8px}
+.choice-card{width:100%;display:flex;align-items:center;justify-content:center;padding:8px;border-radius:8px;background:#fff;border:1px solid rgba(0,0,0,0.04)}
+.choice-card .choice-text{font-size:14px;color:#0b1724;padding:6px}
+.choice-card .choice-img{max-width:100%;max-height:120px;object-fit:contain;border-radius:6px;display:block}
+
+/* Header labels above the choices area: A B C D E */
+.choices-header .choice-headers{display:grid;grid-template-columns:repeat(5,1fr);gap:18px;align-items:center;padding:8px 0}
+.choices-header .choice-headers span{display:inline-block;text-align:center;font-weight:700;color:#234}
+@media (max-width:1200px){
+	.choices-header .choice-headers span{width:100px}
+}
+@media (max-width:900px){
+	.choices-header .choice-headers span{width:88px;font-size:13px}
+}
+
+/* Image previews for questions and choices */
+#adminContent .qimg{max-width:220px;max-height:140px;object-fit:contain;border-radius:6px;display:block;margin:6px 0}
+@media (max-width:1200px){
+	.choice-card{flex:0 0 84px;min-width:64px}
+	.choice-card .choice-img{max-height:92px}
+}
+@media (max-width:900px){
+	/* small screens: allow horizontal scroller */
+	/* small screens: restore horizontal scroller */
+	.choice-list{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:8px}
+	.choice-card{flex:0 0 96px;min-width:72px;padding:6px}
+	.choice-card .choice-img{max-height:80px}
+}
+
+/* DEBUG: temporary outlines to visualize stacking and hit areas */
+.sidebar.card{outline:2px solid rgba(124,58,237,0.12)}
+.main-card{outline:2px dashed rgba(6,182,212,0.06)}
+
+/* Sidebar category button hover/focus glow */
+.sidebar .category-links a.category-link{
+	transition:transform 180ms ease, box-shadow 220ms ease, background 220ms ease, border-color 180ms ease;
+	position:relative;
+	display:block;
+	z-index:10; /* keep above the glow pseudo-element */
+}
+/* Stronger, more specific hover/focus rules so they win over inline page styles */
+.sidebar .category-links a.category-link:hover,
+.sidebar .category-links a.category-link:focus,
+.sidebar .category-links a.category-link:focus-visible{
+	transform:translateY(-3px) !important;
+	border-color: rgba(124,58,237,0.6) !important;
+	color: #07182a !important;
+	background: linear-gradient(90deg, rgba(124,58,237,0.10), rgba(6,182,212,0.06)) !important;
+	box-shadow: 0 12px 36px rgba(124,58,237,0.12), 0 0 18px rgba(6,182,212,0.08) inset !important;
+}
+.sidebar .category-links a.category-link:active{
+	transform:translateY(-1px) scale(0.997) !important;
+}
+
+/* glowing pseudo-element behind the button to create a vivid border/background glow */
+.sidebar .category-links a.category-link::before{
+	content: '';
+	position: absolute;
+	left: -8px;
+	right: -8px;
+	top: -6px;
+	bottom: -6px;
+	border-radius: 12px;
+	background: linear-gradient(90deg, rgba(124,58,237,0.95), rgba(6,182,212,0.95));
+	filter: blur(8px);
+	opacity: 0;
+	transition: opacity 220ms ease, transform 220ms ease;
+	z-index: 5;
+	pointer-events: none;
+}
+.sidebar .category-links a.category-link:hover::before,
+.sidebar .category-links a.category-link:focus::before,
+.sidebar .category-links a.category-link:focus-visible::before{
+	opacity: 0.18 !important;
+	transform: scale(1.02);
+}
+
+/* Floating toolbar (converted from sidebar) */
+.floating-toolbar{max-width:360px;margin:18px auto;padding:18px;border-radius:8px;border:1px solid #e9e5f6;background:#fff;box-shadow:0 1px 6px rgba(16,24,40,0.04)}
+@media (min-width:901px){
+  .floating-toolbar{position:sticky;top:calc(var(--admin-toolbar-top,72px));align-self:flex-start;margin-left:24px}
+}
+
+.floating-toolbar .category-links a.category-link{display:block;margin-bottom:8px;padding:8px 12px;border-radius:8px;text-align:center}
+
+/* Header-mounted category bar — sticky at the top with nav */
+.admin-header-bar{position:sticky;top:0;z-index:11000;background:#fff;border-bottom:1px solid rgba(0,0,0,0.04);box-shadow:0 6px 20px rgba(16,24,40,0.04)}
+.admin-header-bar{will-change:transform}
+.admin-header-bar .category-links{
+	display:flex;
+	gap:8px;
+	align-items:center;
+	flex-wrap:nowrap;
+	overflow-x:visible;
+	padding-bottom:6px;
+	justify-content:flex-start;
+}
+.admin-header-bar .category-links a.category-link{display:inline-block;margin:0;padding:6px 10px;border-radius:6px;background:#f7fafc;border:1px solid #eef2f7;flex:0 0 auto;white-space:nowrap;font-size:13px;text-decoration:none}
+.admin-header-bar .category-links a.category-link.active{
+	/* vibrant active style: blue→cyan gradient with white text and soft shadow */
+	background: linear-gradient(90deg,#7c3aed,#06b6d4);
+	color: #fff;
+	border-color: transparent;
+	box-shadow: 0 8px 22px rgba(124,58,237,0.12);
+}
+
+/* ensure main content keeps enough top spacing when header is present */
+body{--admin-header-height:var(--admin-header-height,0px)}
+.main-card{padding-top:calc(var(--admin-header-height) + 24px)}
+
+/* Glow pseudo-element for header buttons (similar to sidebar) */
+.admin-header-bar .category-links a.category-link{position:relative;transition:transform 140ms ease, box-shadow 180ms ease, background 180ms ease, border-color 140ms ease}
+.admin-header-bar .category-links a.category-link::before{content:'';position:absolute;left:-8px;right:-8px;top:-6px;bottom:-6px;border-radius:12px;background:linear-gradient(90deg, rgba(124,58,237,0.95), rgba(6,182,212,0.95));filter:blur(8px);opacity:0;transition:opacity 220ms ease, transform 220ms ease;z-index:5;pointer-events:none}
+.admin-header-bar .category-links a.category-link:hover,.admin-header-bar .category-links a.category-link:focus,.admin-header-bar .category-links a.category-link:focus-visible{transform:translateY(-3px);border-color:rgba(124,58,237,0.6);background:linear-gradient(90deg, rgba(124,58,237,0.10), rgba(6,182,212,0.06));box-shadow:0 12px 36px rgba(124,58,237,0.12),0 0 18px rgba(6,182,212,0.08) inset}
+.admin-header-bar .category-links a.category-link:hover::before,.admin-header-bar .category-links a.category-link:focus::before,.admin-header-bar .category-links a.category-link:focus-visible::before{opacity:0.18;transform:scale(1.02)}
+.admin-header-bar .category-links a.category-link.active::before{ /* stronger glow for active */ opacity: 0.18; }
+
+@media (max-width:1200px){
+	.admin-header-bar .category-links a.category-link{padding:6px 8px;font-size:12px}
+}
+@media (max-width:900px){
+	.admin-header-bar .category-links{gap:6px}
+	.admin-header-bar .category-links a.category-link{padding:5px 8px;font-size:12px}
+}
+
+/* Action buttons */
+.btn-primary{background:linear-gradient(90deg,#16a34a,#4ade80);color:#fff;padding:8px 12px;border-radius:8px;border:0;cursor:pointer;font-weight:600}
+.btn-primary#refreshQuestionsBtn, #refreshQuestionsBtn.btn-primary{ /* Refresh button: blue→white gradient */
+	background: linear-gradient(90deg,#7c3aed 0%, #b5a8ff 40%, #ffffff 100%) !important;
+	color: #07203a !important;
+	padding:8px 12px !important;
+	border-radius:8px !important;
+	border: 1px solid rgba(124,58,237,0.18) !important;
+	box-shadow: 0 6px 18px rgba(124,58,237,0.12) !important;
+}
+#refreshQuestionsBtn:hover{ transform: translateY(-2px); box-shadow: 0 12px 36px rgba(124,58,237,0.16) !important; }
+.icon-btn{border:0;background:transparent;padding:6px;border-radius:6px;cursor:pointer;font-size:14px}
+.icon-btn.edit-btn{color:#2b6cb0}
+.icon-btn.delete-btn{color:#d04444}
+.actions-cell{position:relative;padding:0 8px;min-width:180px;height:48px}
+.actions-cell .icon-btn{position:absolute;top:50%;transform:translateY(-50%);background:transparent;padding:6px}
+.actions-cell .icon-btn.edit-btn{left:40px}
+.actions-cell .icon-btn.delete-btn{right:50px}
+
+/* Right-align only the Actions header label */
+#questionsTable thead th.actions-header{ text-align:right; padding-right: 60px; height:48px; vertical-align:middle }
+
+/* Simple modal for Add/Edit */
+.qa-modal{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(3,7,18,0.4);display:flex;align-items:center;justify-content:center;z-index:12000}
+.qa-modal .panel{background:#fff;border-radius:10px;padding:18px;max-width:720px;width:100%;box-shadow:0 12px 40px rgba(6,8,20,0.12)}
+.qa-modal .panel h3{margin-top:0}
+
+/* Unified category-links design (match Image 2) - force purple accent across pages */
+.category-links a.category-link{
+	color: #7c3aed !important;
+	background: linear-gradient(90deg, rgba(124,58,237,0.06), rgba(6,182,212,0.02)) !important;
+	border: 1px solid rgba(124,58,237,0.12) !important;
+	font-weight: 700 !important;
+	padding: 6px 10px !important;
+	border-radius: 8px !important;
+	text-decoration: none !important;
+}
+.admin-header-bar .category-links a.category-link{ color: #7c3aed !important; background: linear-gradient(90deg, rgba(124,58,237,0.06), rgba(6,182,212,0.02)) !important; border: 1px solid rgba(124,58,237,0.12) !important; }
+.sidebar .category-links a.category-link{ color: #7c3aed !important; background: linear-gradient(90deg, rgba(124,58,237,0.04), rgba(255,255,255,0.00)) !important; border: 1px solid rgba(124,58,237,0.06) !important; }
+.floating-toolbar .category-links a.category-link{ color: #7c3aed !important; background: linear-gradient(90deg, rgba(124,58,237,0.04), rgba(255,255,255,0.00)) !important; border: 1px solid rgba(124,58,237,0.06) !important; }
+
+.qa-modal .row{display:flex;gap:8px;margin-bottom:8px}
+.qa-modal .row input, .qa-modal .row textarea{flex:1;padding:8px;border:1px solid #e6e6e9;border-radius:6px}
+.qa-modal .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+
+/* Remove leftover sidebar spacing so main content stretches full width */
+@media (min-width:901px){
+  .main-card{margin-left:0 !important;padding-left:18px;padding-right:18px}
+}
