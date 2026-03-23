@@ -17,16 +17,22 @@
   .confirm-actions .btn-yes{background:#0ea5a4;color:#fff;border:none;padding:6px 12px;border-radius:6px}
   </style>
   <link rel="stylesheet" href="admin.css" />
+  <style>
+    /* Make the admin category links bold on this page */
+    .category-links a.category-link{ font-weight:700 !important; }
+  </style>
 </head>
 <body>
   <script src="admin-header.v2.js"></script>
+  <script>window.adminCategory = 'Numerical Ability';</script>
   <script src="admin-modal.js"></script>
 
   <div class="layout">
     <main class="main-card" id="adminContent">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
         <h2 style="margin:0">Numerical Ability</h2>
-        <div><button id="refreshQuestionsBtn" class="btn-primary" style="margin-right: 8px;">Refresh</button>
+        <div>
+        <button id="refreshQuestionsBtn" class="btn-primary" style="margin-right:8px">Refresh</button>
         <button id="addQuestionBtn" class="btn-primary">Add Question</button>
         </div>
       </div>
@@ -55,22 +61,13 @@
 
   <script>
     const backendBase = `${location.protocol}//${location.hostname}:8000`;
-    // Force refresh button gradient inline to override other styles/cache
-    try{
-      const _btn = document.getElementById('refreshQuestionsBtn');
-      if (_btn){
-        _btn.style.background = 'linear-gradient(90deg,#7c3aed 0%, #b5a8ff 40%, #ffffff 100%)';
-        _btn.style.color = '#07203a';
-        _btn.style.border = '1px solid rgba(124,58,237,0.18)';
-        _btn.style.boxShadow = '0 6px 18px rgba(124,58,237,0.12)';
-      }
-    }catch(e){/* ignore */}
     function syncAccent(){ const hb = document.getElementById('adminHeaderBar'); if (!hb) return; document.documentElement.style.setProperty('--admin-header-height', hb.offsetHeight + 'px'); }
     window.addEventListener('load', syncAccent); window.addEventListener('resize', ()=> setTimeout(syncAccent,50));
 
     (function highlightCategory(){ const links = Array.from(document.querySelectorAll('.category-links a.category-link')); if (!links.length) return; const path = window.location.pathname.split('/').pop() || 'questions-numerical-abilty.html'; const normalized = (path === 'questions-numerical-abilty.html' || path === '') ? 'questions-numerical-abilty.html' : path; let matched = links.find(a => a.getAttribute('href') === normalized); if (!matched) matched = links[0]; matched.classList.add('active'); })();
 
-    (async function loadQuestions(){
+    // Expose loader so we can refresh table without reloading the page
+    window.loadQuestions = async function loadQuestions(){
       const msgEl = document.getElementById('questionsMessage'); const tbody = document.querySelector('#questionsTable tbody');
       try{
         msgEl.textContent = 'Loading questions…';
@@ -109,6 +106,7 @@
           // (Choices column removed) -- options still fetched but not shown in table
 
           const tdActions = document.createElement('td'); tdActions.className='actions-cell';
+          const viewBtn = document.createElement('button'); viewBtn.className='icon-btn view-btn'; viewBtn.title='View'; viewBtn.innerHTML='🔍'; viewBtn.addEventListener('click', ()=> openViewModal(row));
           const editBtn=document.createElement('button'); editBtn.className='icon-btn edit-btn'; editBtn.title='Edit'; editBtn.innerHTML='✏️'; editBtn.addEventListener('click', ()=> openModal('edit', row));
           const deleteBtn=document.createElement('button'); deleteBtn.className='icon-btn delete-btn'; deleteBtn.title='Delete'; deleteBtn.innerHTML='🗑️';
           deleteBtn.addEventListener('click', ()=>{
@@ -126,23 +124,27 @@
               }catch(e){ console.error(e); alert('Delete error'); }
             });
           });
-          tdActions.appendChild(editBtn); tdActions.appendChild(deleteBtn); tr.appendChild(tdActions);
+          tdActions.appendChild(viewBtn); tdActions.appendChild(editBtn); tdActions.appendChild(deleteBtn); tr.appendChild(tdActions);
           tbody.appendChild(tr);
         }
       }catch(e){ msgEl.textContent='Error loading questions'; console.error(e); }
-    })();
+    };
+
+    // initial load
+    window.loadQuestions();
 
     async function openModal(mode, row){
       // remove existing
       let existing=document.getElementById('qaModal'); if (existing) existing.remove();
       // fetch modal fragment and insert
       try{
-        const modalUrl = new URL('add-question-modal.html', location.href).toString();
+          const modalUrl = new URL('update-question-modal.html', location.href).toString();
         console.log('loading modal from', modalUrl);
         let res = null;
         try{ res = await fetch(modalUrl); }catch(err){ console.warn('fetch error', modalUrl, err); res = null; }
+        
         if (!res || !res.ok){
-          const rootUrl = `${location.origin}/add-question-modal.html`;
+          const rootUrl = `${location.origin}/update-question-modal.html`;
           console.log('modal fetch failed, trying root URL', rootUrl);
           try{ res = await fetch(rootUrl); }catch(err){ console.warn('fetch error', rootUrl, err); res = null; }
         }
@@ -157,6 +159,8 @@
           const title = modalEl.querySelector('#qaModalTitle'); if (title) title.textContent = mode === 'add' ? 'Add Question' : 'Edit Question';
           const fields = ['qa_question','qa_opt_a','qa_opt_b','qa_opt_c','qa_opt_d','qa_opt_e'];
           if (mode === 'edit' && row){
+            const qidEl = document.getElementById('question_id');
+            if (qidEl) qidEl.value = row.question_id || row.questionId || row.id || '';
             document.getElementById('qa_question').value = row.question || '';
             document.getElementById('qa_long_text').value = row.long_text || row.longtext || '';
             document.getElementById('qa_opt_a').value = row.opt_a || '';
@@ -166,7 +170,7 @@
             document.getElementById('qa_opt_e').value = row.opt_e || '';
             const correctSel = document.getElementById('qa_correct_answer');
             if (correctSel) correctSel.value = row.correct_answer || row.answer || row.correct || '';
-            const map = {qa_opt_a_preview: row.opt_a, qa_opt_b_preview: row.opt_b, qa_opt_c_preview: row.opt_c, qa_opt_d_preview: row.opt_d, qa_opt_e_preview: row.opt_e};
+            const map = {qa_opt_a_preview: row.opt_a, qa_opt_b_preview: row.opt_b, qa_opt_c_preview: row.opt_c, qa_opt_d_preview: row.opt_d, qa_opt_e_preview: row.opt_e, qa_image_preview: row.image_url || row.image || row.question_image};
             for (const id in map){ const el = document.getElementById(id); if (el) el.src = looksLikeUrl(map[id]) ? map[id] : ''; }
           }
 
@@ -204,6 +208,29 @@
               viewA.disabled = !(prevA && prevA.src);
             }
 
+            // file browse for Question Image: ensure preview + hidden src update
+            const qfile = document.getElementById('qa_image_file');
+            const qprev = document.getElementById('qa_image_preview');
+            const qview = document.getElementById('qa_image_view');
+            const qhid = document.getElementById('qa_image_src');
+            if (qfile && qprev){
+              qfile.addEventListener('change', (evt)=>{
+                const f = qfile.files && qfile.files[0];
+                if (!f) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                  const val = e.target.result;
+                  qprev.src = val;
+                  qprev.style.display = 'inline-block';
+                  if (qhid) qhid.value = val || '';
+                  if (qview){ qview.style.display = 'inline-block'; qview.disabled = !val; }
+                  if (window.updateModalViewButtons) updateModalViewButtons(modalEl);
+                };
+                reader.readAsDataURL(f);
+              });
+            }
+            if (qview){ qview.addEventListener('click', ()=>{ if (qprev && qprev.src) window.open(qprev.src, '_blank'); }); qview.disabled = !(qprev && qprev.src); }
+
           // cancel/save
           const cancelBtn = modalEl.querySelector('#qaCancel'); if (cancelBtn) cancelBtn.addEventListener('click', ()=> modalEl.remove());
           const saveBtn = modalEl.querySelector('#qaSave'); if (saveBtn) saveBtn.addEventListener('click', async ()=>{
@@ -223,6 +250,7 @@
               opt_c: document.getElementById('qa_opt_c').value,
               opt_d: document.getElementById('qa_opt_d').value,
               opt_e: document.getElementById('qa_opt_e').value || null,
+              image_url: (document.getElementById('qa_image_src') && document.getElementById('qa_image_src').value) || null,
               answer: (document.getElementById('qa_correct_answer') && document.getElementById('qa_correct_answer').value) || null
             };
             try{
@@ -248,7 +276,43 @@
 
       }catch(e){ console.error('openModal error', e); alert('Could not open modal: ' + (e && e.message ? e.message : String(e))); }
     }
+
+    // Open view-only modal for a given row
+    async function openViewModal(row){
+      let existing = document.getElementById('viewQaModal'); if (existing) existing.remove();
+      try{
+        const modalUrl = new URL('view-question-modal.html', location.href).toString();
+        let res = null;
+        try{ res = await fetch(modalUrl); }catch(err){ res = null; }
+        if (!res || !res.ok){ const rootUrl = `${location.origin}/view-question-modal.html`; try{ res = await fetch(rootUrl); }catch(err){ res = null; } }
+        if (!res || !res.ok){ const code = res ? res.status : 'network-error'; throw new Error('Failed to load view modal ('+code+')'); }
+        const html = await res.text(); const wrapper = document.createElement('div'); wrapper.innerHTML = html; document.body.appendChild(wrapper);
+        const modalEl = document.getElementById('viewQaModal'); if (!modalEl) throw new Error('View modal not found');
+        // Ensure the view modal is centered on this page specifically
+        modalEl.style.display = 'flex';
+        modalEl.style.position = 'fixed';
+        modalEl.style.inset = '0';
+        modalEl.style.alignItems = 'center';
+        modalEl.style.justifyContent = 'center';
+        modalEl.style.zIndex = '13000';
+        // make panel vertically scrollable if content is tall
+        const panelEl = modalEl.querySelector('.panel'); if (panelEl) { panelEl.style.maxHeight = '80vh'; panelEl.style.overflow = 'auto'; }
+        // populate fields
+        const setText = (id, text)=>{ const el = document.getElementById(id); if (!el) return; if (looksLikeUrl(text)){ const a = document.createElement('a'); a.href = text; a.textContent = text; a.target='_blank'; el.innerHTML=''; el.appendChild(a); } else { el.textContent = text || ''; } };
+        setText('v_question', row.question || '');
+        setText('v_long_text', row.long_text || row.longtext || '');
+        const img = document.getElementById('v_image_preview'); if (img){ const src = row.image_url || row.image || row.question_image || ''; if (src){ img.src = src; img.style.display = 'block'; } else { img.style.display = 'none'; } }
+        // choices
+        const choicesEl = document.getElementById('v_choices'); if (choicesEl){ choicesEl.innerHTML = ''; const opts = [{k:'A',v:row.opt_a},{k:'B',v:row.opt_b},{k:'C',v:row.opt_c},{k:'D',v:row.opt_d},{k:'E',v:row.opt_e}]; for (const o of opts){ if (!o.v) continue; const c = document.createElement('div'); c.className='choice'; const textIsUrl = looksLikeUrl(o.v); if (textIsUrl){ const img = document.createElement('img'); img.className='choice-img'; img.src = o.v; img.alt = 'choice '+o.k; c.appendChild(img); const span = document.createElement('div'); span.textContent = o.k + ': (image)'; c.appendChild(span); } else { const span = document.createElement('div'); span.textContent = o.k + ': ' + o.v; c.appendChild(span); } choicesEl.appendChild(c); } }
+        const ca = document.getElementById('v_correct_answer'); if (ca) ca.textContent = row.correct_answer || row.answer || row.correct || '';
+        const closeBtn = document.getElementById('vClose'); if (closeBtn) closeBtn.addEventListener('click', ()=>{ try{ modalEl.remove(); }catch(e){} });
+      }catch(e){ console.error('openViewModal error', e); alert('Could not open view modal: '+(e && e.message? e.message : String(e))); }
+    }
+
     document.getElementById('addQuestionBtn').addEventListener('click', ()=> openModal('add'));
+
+    // wire refresh button (disable + show 'Refreshing…' while loading)
+    try{ const rbtn = document.getElementById('refreshQuestionsBtn'); if (rbtn) rbtn.addEventListener('click', ()=> { rbtn.disabled = true; rbtn.textContent = 'Refreshing…'; Promise.resolve(window.loadQuestions()).finally(()=>{ rbtn.disabled = false; rbtn.textContent = 'Refresh'; }); }); }catch(e){ console.error('refresh button wiring failed', e); }
 
     // Small helper: escape HTML and show a Yes/No confirmation modal. Calls onYes() when confirmed.
     function escapeHtml(s){ if (s === null || typeof s === 'undefined') return ''; return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[c]); }

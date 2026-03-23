@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Verbal Ability — Questions</title>
+  <link rel="stylesheet" href="admin.css" />
+  <style>
+    .category-links a.category-link{display:block;margin-bottom:8px;padding:8px 10px;border-radius:8px;text-align:center;color:#7c3aed;background:linear-gradient(90deg, rgba(124,58,237,0.06), rgba(6,182,212,0.02));border:1px solid rgba(124,58,237,0.12);text-decoration:none;font-weight:700}
+    .category-links a.category-link.active{background:linear-gradient(90deg,#7c3aed,#06b6d4);color:#fff;border-color:transparent;box-shadow:0 8px 22px rgba(124,58,237,0.12)}
+  </style>
+</head>
+<body>
+  <script src="admin-header.v2.js"></script>
+  <script>window.adminCategory = 'Verbal Ability';</script>
+  <script src="admin-modal.js"></script>
+
+  <div class="layout">
+
+    <main class="main-card" id="adminContent">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <h2 style="margin:0">Verbal Ability</h2>
+        <div><button id="refreshQuestionsBtn" class="btn-primary" style="margin-right:8px">Refresh</button>
+            <button id="addQuestionBtn" class="btn-primary" aria-label="Add question">Add Question</button>
+        </div>
+      </div>
+      <div id="questionsMessage" class="muted" style="margin-bottom:12px"></div>
+      <div style="overflow:visible">
+        <table id="questionsTable">
+          <colgroup>
+            <col style="width:80px" />
+            <col style="width:40%" />
+            <col />
+            <col style="width:180px" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Question ID</th>
+              <th>Question</th>
+              <th>Long Text</th>
+              <th class="actions-header">Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const backendBase = `${location.protocol}//${location.hostname}:8000`;
+    function syncAccent(){
+      const hb = document.getElementById('adminHeaderBar');
+      if (!hb) return;
+      document.documentElement.style.setProperty('--admin-header-height', hb.offsetHeight + 'px');
+    }
+    window.addEventListener('load', syncAccent);
+    window.addEventListener('resize', ()=> setTimeout(syncAccent,50));
+
+    (function highlightCategory(){
+      const links = Array.from(document.querySelectorAll('.category-links a.category-link'));
+      if (!links.length) return;
+      const path = window.location.pathname.split('/').pop() || 'questions-verbal-ability.html';
+      const normalized = (path === 'questions-verbal-ability.html' || path === '') ? 'questions-verbal-ability.html' : path;
+      let matched = links.find(a => a.getAttribute('href') === normalized);
+      if (!matched){ matched = links[0]; }
+      matched.classList.add('active');
+    })();
+
+    window.loadQuestions = async function loadQuestions(){
+      const msgEl = document.getElementById('questionsMessage');
+      const tbody = document.querySelector('#questionsTable tbody');
+      try{
+        msgEl.textContent = 'Loading questions…';
+        const res = await fetch(`${backendBase}/questions?category=${encodeURIComponent('Verbal Ability')}`);
+        if (!res.ok){ msgEl.textContent = 'Failed to load questions: ' + res.status; return }
+        const data = await res.json();
+        if (!Array.isArray(data)){
+          msgEl.textContent = 'No data returned';
+          return;
+        }
+        msgEl.textContent = '';
+        tbody.innerHTML = '';
+        for (const row of data){
+          const qid = row.question_id || row.id || '';
+          const qtxt = row.question || row.question_text || '';
+          const opts = [row.opt_a, row.opt_b, row.opt_c, row.opt_d, row.opt_e].filter(Boolean);
+
+          const tr = document.createElement('tr');
+
+          const tdId = document.createElement('td'); tdId.textContent = qid; tr.appendChild(tdId);
+
+          const tdQ = document.createElement('td');
+          if (looksLikeUrl(qtxt)){
+            const urls = splitUrls(qtxt);
+            for (const u of urls){ const img = document.createElement('img'); img.className='qimg'; img.src=u; img.alt='question image'; tdQ.appendChild(img); }
+          } else { tdQ.textContent = qtxt }
+          tr.appendChild(tdQ);
+
+          // Long text cell (from Table_Questions.long_text)
+          const tdLong = document.createElement('td');
+          tdLong.className = 'longtext-cell';
+          tdLong.textContent = row.long_text || row.longtext || '';
+          tr.appendChild(tdLong);
+
+          // Actions cell
+          const tdActions = document.createElement('td'); tdActions.className='actions-cell';
+          const viewBtn = document.createElement('button'); viewBtn.className='icon-btn view-btn'; viewBtn.title='View'; viewBtn.innerHTML='🔍'; viewBtn.addEventListener('click', ()=> openViewModal(row));
+          const editBtn = document.createElement('button'); editBtn.className='icon-btn edit-btn'; editBtn.title='Edit'; editBtn.innerHTML='✏️'; editBtn.addEventListener('click', ()=> openModal('edit', row));
+          const deleteBtn = document.createElement('button'); deleteBtn.className='icon-btn delete-btn'; deleteBtn.title='Delete'; deleteBtn.innerHTML='🗑️'; deleteBtn.addEventListener('click', async ()=>{ const idPart = row.id ? ` (internal id: ${row.id})` : ''; if (!confirm(`Delete question ${qid}${idPart} — are you sure?`)) return; try{ const delRes = await fetch(`${backendBase}/questions/${encodeURIComponent(row.id)}?category=${encodeURIComponent('Verbal Ability')}` , { method: 'DELETE' }); if (!delRes.ok){ alert('Delete failed: ' + delRes.status); return; } tbody.removeChild(tr); }catch(e){ console.error(e); alert('Delete error'); } });
+          tdActions.appendChild(viewBtn); tdActions.appendChild(editBtn); tdActions.appendChild(deleteBtn); tr.appendChild(tdActions);
+
+          tbody.appendChild(tr);
+        }
+      }catch(e){ msgEl.textContent='Error loading questions'; console.error(e); }
+    };
+
+    // initial load
+    window.loadQuestions();
+
+    try{ const rbtn = document.getElementById('refreshQuestionsBtn'); if (rbtn) rbtn.addEventListener('click', ()=> { rbtn.disabled = true; rbtn.textContent = 'Refreshing…'; Promise.resolve(window.loadQuestions()).finally(()=>{ rbtn.disabled = false; rbtn.textContent = 'Refresh'; }); }); }catch(e){ console.error('refresh button wiring failed', e); }
+
+    async function openModal(mode, row){
+      let existing=document.getElementById('qaModal'); if (existing) existing.remove();
+      try{
+        const modalUrl = new URL('update-question-modal.html', location.href).toString();
+        let res = null;
+        try{ res = await fetch(modalUrl); }catch(err){ res = null; }
+        if (!res || !res.ok){ const rootUrl = `${location.origin}/update-question-modal.html`; try{ res = await fetch(rootUrl); }catch(err){ res = null; } }
+        if (!res || !res.ok){ const code = res ? res.status : 'network-error'; throw new Error('Failed to load modal (' + code + ')'); }
+        const html = await res.text(); const wrapper = document.createElement('div'); wrapper.innerHTML = html; document.body.appendChild(wrapper);
+        const modalEl = document.getElementById('qaModal'); if (!modalEl) throw new Error('Modal not found in fragment'); modalEl.style.display='block';
+
+        function initializeQuestionModal(modalEl, mode, row){
+          const title = modalEl.querySelector('#qaModalTitle'); if (title) title.textContent = mode === 'add' ? 'Add Question' : 'Edit Question';
+          const fields = ['qa_question','qa_opt_a','qa_opt_b','qa_opt_c','qa_opt_d','qa_opt_e'];
+          if (mode === 'edit' && row){
+            const qidEl = document.getElementById('question_id'); if (qidEl) qidEl.value = row.question_id || row.id || '';
+            document.getElementById('qa_question').value = row.question || '';
+            document.getElementById('qa_long_text').value = row.long_text || row.longtext || '';
+            document.getElementById('qa_opt_a').value = row.opt_a || '';
+            document.getElementById('qa_opt_b').value = row.opt_b || '';
+            document.getElementById('qa_opt_c').value = row.opt_c || '';
+            document.getElementById('qa_opt_d').value = row.opt_d || '';
+            document.getElementById('qa_opt_e').value = row.opt_e || '';
+            const correctSel = document.getElementById('qa_correct_answer'); if (correctSel) correctSel.value = row.correct_answer || row.answer || row.correct || '';
+            const map = {qa_opt_a_preview: row.opt_a, qa_opt_b_preview: row.opt_b, qa_opt_c_preview: row.opt_c, qa_opt_d_preview: row.opt_d, qa_opt_e_preview: row.opt_e, qa_image_preview: row.image_url || row.image || row.question_image};
+            for (const id in map){ const el = document.getElementById(id); if (el) el.src = looksLikeUrl(map[id]) ? map[id] : ''; }
+          }
+
+          for (const name of fields.slice(1)){
+            const inp = document.getElementById(name); const prev = document.getElementById(name + '_preview'); const viewBtn = document.getElementById(name + '_view');
+            if (!inp || !prev) continue;
+            inp.addEventListener('input', ()=>{ const v=inp.value.trim(); prev.src = looksLikeUrl(v)? v : ''; prev.style.display = prev.src ? 'inline-block' : 'none'; if (viewBtn){ viewBtn.disabled = !prev.src; } });
+            prev.style.display = prev.src ? 'inline-block' : 'none'; if (viewBtn){ viewBtn.disabled = !prev.src; }
+          }
+
+          const fileA = document.getElementById('qa_opt_a_file'); const prevA = document.getElementById('qa_opt_a_preview'); const viewA = document.getElementById('qa_opt_a_view');
+          if (fileA && prevA){ fileA.addEventListener('change', ()=>{ const f = fileA.files && fileA.files[0]; if (!f) return; const reader = new FileReader(); reader.onload = (e)=>{ prevA.src = e.target.result; prevA.style.display='inline-block'; if (window.updateModalViewButtons) updateModalViewButtons(modalEl); }; reader.readAsDataURL(f); }); }
+          if (viewA){ viewA.addEventListener('click', ()=>{ if (prevA && prevA.src) window.open(prevA.src, '_blank'); }); viewA.disabled = !(prevA && prevA.src); }
+
+          const qfile = document.getElementById('qa_image_file');
+          const qprev = document.getElementById('qa_image_preview');
+          const qview = document.getElementById('qa_image_view');
+          const qhid = document.getElementById('qa_image_src');
+          if (qfile && qprev){
+            qfile.addEventListener('change', ()=>{ const f = qfile.files && qfile.files[0]; if (!f) return; const reader = new FileReader(); reader.onload = (e)=>{ const val = e.target.result; qprev.src = val; qprev.style.display='inline-block'; if (qhid) qhid.value = val || ''; if (qview){ qview.style.display='inline-block'; qview.disabled = !val; } if (window.updateModalViewButtons) updateModalViewButtons(modalEl); }; reader.readAsDataURL(f); });
+          }
+          if (qview){ qview.addEventListener('click', ()=>{ if (qprev && qprev.src) window.open(qprev.src, '_blank'); }); qview.disabled = !(qprev && qprev.src); }
+
+          const cancelBtn = modalEl.querySelector('#qaCancel'); if (cancelBtn) cancelBtn.addEventListener('click', ()=> modalEl.remove());
+          const saveBtn = modalEl.querySelector('#qaSave'); if (saveBtn) saveBtn.addEventListener('click', async ()=>{
+            const correctSel = document.getElementById('qa_correct_answer'); const correctErr = document.getElementById('qa_correct_error'); if (correctErr) correctErr.style.display='none';
+            if (correctSel && !correctSel.value){ if (correctErr){ correctErr.textContent='Select a correct answer'; correctErr.style.display='block'; } else alert('Select a correct answer'); return; }
+            const payload = { question: document.getElementById('qa_question').value, long_text: document.getElementById('qa_long_text') ? document.getElementById('qa_long_text').value : null, opt_a: document.getElementById('qa_opt_a').value, opt_b: document.getElementById('qa_opt_b').value, opt_c: document.getElementById('qa_opt_c').value, opt_d: document.getElementById('qa_opt_d').value, opt_e: document.getElementById('qa_opt_e').value || null, image_url: (document.getElementById('qa_image_src') && document.getElementById('qa_image_src').value) || null, answer: (document.getElementById('qa_correct_answer') && document.getElementById('qa_correct_answer').value) || null };
+            try{
+              if (mode === 'add'){ const r = await fetch(`${backendBase}/questions?category=${encodeURIComponent('Verbal Ability')}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }); if (!r.ok){ alert('Create failed: '+r.status); return; } location.reload(); } else { const r = await fetch(`${backendBase}/questions/${encodeURIComponent(row.id)}?category=${encodeURIComponent('Verbal Ability')}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }); if (!r.ok){ alert('Update failed: '+r.status); return; } location.reload(); }
+            }catch(e){ console.error(e); alert('Save error'); }
+          });
+          const correctSelOn = modalEl.querySelector('#qa_correct_answer'); if (correctSelOn){ const correctErrOn = modalEl.querySelector('#qa_correct_error'); correctSelOn.addEventListener('change', ()=>{ if (correctErrOn) correctErrOn.style.display='none'; }); }
+        }
+
+        initializeQuestionModal(modalEl, mode, row);
+        if (window.updateModalViewButtons) updateModalViewButtons(modalEl);
+      }catch(e){ console.error('openModal error', e); alert('Could not open modal: ' + (e && e.message ? e.message : String(e))); }
+    }
+    document.getElementById('addQuestionBtn').addEventListener('click', ()=> openModal('add'));
+
+    // Open view-only modal for a given row
+    async function openViewModal(row){
+      let existing = document.getElementById('viewQaModal'); if (existing) existing.remove();
+      try{
+        const modalUrl = new URL('view-question-modal.html', location.href).toString();
+        let res = null;
+        try{ res = await fetch(modalUrl); }catch(err){ res = null; }
+        if (!res || !res.ok){ const rootUrl = `${location.origin}/view-question-modal.html`; try{ res = await fetch(rootUrl); }catch(err){ res = null; } }
+        if (!res || !res.ok){ const code = res ? res.status : 'network-error'; throw new Error('Failed to load view modal ('+code+')'); }
+        const html = await res.text(); const wrapper = document.createElement('div'); wrapper.innerHTML = html; document.body.appendChild(wrapper);
+        const modalEl = document.getElementById('viewQaModal'); if (!modalEl) throw new Error('View modal not found'); modalEl.style.display = 'block';
+        const setText = (id, text)=>{ const el = document.getElementById(id); if (!el) return; if (looksLikeUrl(text)){ const a = document.createElement('a'); a.href = text; a.textContent = text; a.target='_blank'; el.innerHTML=''; el.appendChild(a); } else { el.textContent = text || ''; } };
+        setText('v_question', row.question || '');
+        setText('v_long_text', row.long_text || row.longtext || '');
+        const img = document.getElementById('v_image_preview'); if (img){ const src = row.image_url || row.image || row.question_image || ''; if (src){ img.src = src; img.style.display = 'block'; } else { img.style.display = 'none'; } }
+        const choicesEl = document.getElementById('v_choices'); if (choicesEl){ choicesEl.innerHTML = ''; const opts = [{k:'A',v:row.opt_a},{k:'B',v:row.opt_b},{k:'C',v:row.opt_c},{k:'D',v:row.opt_d},{k:'E',v:row.opt_e}]; for (const o of opts){ if (!o.v) continue; const c = document.createElement('div'); c.className='choice'; const textIsUrl = looksLikeUrl(o.v); if (textIsUrl){ const im = document.createElement('img'); im.className='choice-img'; im.src = o.v; im.alt = 'choice '+o.k; c.appendChild(im); const span = document.createElement('div'); span.textContent = o.k + ': (image)'; c.appendChild(span); } else { const span = document.createElement('div'); span.textContent = o.k + ': ' + o.v; c.appendChild(span); } choicesEl.appendChild(c); } }
+        const ca = document.getElementById('v_correct_answer'); if (ca) ca.textContent = row.correct_answer || row.answer || row.correct || '';
+        const closeBtn = document.getElementById('vClose'); if (closeBtn) closeBtn.addEventListener('click', ()=>{ try{ modalEl.remove(); }catch(e){} });
+      }catch(e){ console.error('openViewModal error', e); alert('Could not open view modal: '+(e && e.message? e.message : String(e))); }
+    }
+
+    function looksLikeUrl(s){ if (!s) return false; return /https?:\/\//i.test(s); }
+    function splitUrls(s){ if (!s) return []; return s.split(/\s+|\|,|,\s*/).map(x=>x.trim()).filter(x=>x.length && /https?:\/\//i.test(x)); }
+  </script>
+</body>
+</html>

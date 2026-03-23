@@ -1,6 +1,4 @@
-<!-- add-question-modal.html
-
-  Modal fragment for Add/Edit Question.
+<!-- Modal fragment for Add/Edit Question.
   This file contains the modal HTML only. Pages should fetch this file,
   insert its contents into the DOM, then call the page's modal initializer
   (e.g. `initializeQuestionModal(modalEl, mode, row)`) to wire events.
@@ -19,74 +17,97 @@
   /* Force the panel to be fixed and centered regardless of parent transforms */
   #qaModal.qa-modal .panel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%)}
   /* thumbnail sizing inside modal (ensure visible) */
-  #qaModal .opt-preview{width:650px;height:150px;object-fit:contain;border-radius:6px;border:1px solid #e6e6e9}
+  #qaModal .opt-preview{width:100%;height:150px;object-fit:contain;border-radius:6px;border:1px solid #e6e6e9;display:block;background:#fafafa}
   /* Make text inputs fill their flex containers and allow shrinking in narrow layouts */
   #qaModal .row input, #qaModal .row textarea{width:100%;min-width:0;box-sizing:border-box}
 </style>
 <div class="qa-modal" id="qaModal" style="display:none">
   <div class="panel">
     <h3 id="qaModalTitle">Add Question</h3>
+    <div class="qa-content" style="max-height:60vh;overflow:auto;padding-right:8px">
     <div class="row"><input id="question_id" placeholder="question_id" disabled /></div>
     <div class="row"><input id="qa_question" placeholder="Question text" /></div>
-     <div class="row" style="margin-bottom:8px">
+    <div class="row" style="margin-bottom:8px">
         <textarea id="qa_long_text" placeholder="Long text (solution, explanation, or extra info)" rows="4" style="width:100%;padding:8px;border:1px solid #e6e6e9;border-radius:6px"></textarea>
       </div>
-    <div class="row" style="display:flex;align-items:center;gap:8px">
-      <div style="flex:1"><input id="qa_opt_a" placeholder="Option A" /></div>
-    </div>
-    <div class="row" style="display:flex;align-items:center;gap:8px">
-      <div style="flex:1"><input id="qa_opt_b" placeholder="Option B" /></div>
-    </div>
-    <div class="row" style="display:flex;align-items:center;gap:8px">
-      <div style="flex:1"><input id="qa_opt_c" placeholder="Option C" /></div>
-    </div>
-    <div class="row" style="display:flex;align-items:center;gap:8px">
-      <div style="flex:1"><input id="qa_opt_d" placeholder="Option D" /></div>
-    </div>
-    <div class="row" style="display:flex;align-items:center;gap:8px">
-      <div style="flex:1"><input id="qa_opt_e" placeholder="Option E" /></div>
-    </div>
+<!-- Question Image -->
+<div class="row" style="display:flex;align-items:center;gap:8px">
+  <img id="qa_image_preview" class="opt-preview" src="" alt="Question image preview" />
+  <button type="button" id="qa_image_browse" style="display:inline-block;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#a0a0a0;cursor:pointer;font-size:13px;color:#0b1724">
+    Browse
+  </button>
+  <input id="qa_image_file" type="file" accept="image/*" style="display:none" />
+  <button id="qa_image_remove" style="display:none;margin-left:6px;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer">Remove</button>
+  <button id="qa_image_view" style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">View</button>
+</div>
+<input type="hidden" id="qa_image_src" />
 
-    <div class="row" style="display:flex;align-items:center;gap:8px">
-      <img id="qa_opt_a_preview" class="opt-preview" src="" alt="A preview" />
-      <label style="display:inline-block;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#a0a0a0;cursor:pointer;font-size:13px;color:#0b1724">
-        Browse
-        <input id="qa_opt_a_file" type="file" accept="image/*" style="display:none" />
-      </label>
-      <button id="qa_opt_a_view" disabled style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">View</button>
-    </div>
-    <div class="row" style="display:flex;align-items:center;gap:8px">
+<div class="row"><input id="qa_opt_a" placeholder="Option A" /></div>
+<div class="row"><input id="qa_opt_b" placeholder="Option B" /></div>
+<div class="row"><input id="qa_opt_c" placeholder="Option C" /></div>
+<div class="row"><input id="qa_opt_d" placeholder="Option D" /></div>
+<div class="row"><input id="qa_opt_e" placeholder="Option E" /></div>
+
+<div class="field">
+  <div class="row" style="display:flex;align-items:center;gap:8px">
+    <img id="qa_opt_a_preview" class="opt-preview" src="" alt="A preview" />
+    <button type="button" id="qa_opt_a_browse" style="display:inline-block;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#a0a0a0;cursor:pointer;font-size:13px;color:#0b1724">
+      Browse
+    </button>
+    <input id="qa_opt_a_file" type="file" accept="image/*" style="display:none" />
+    <button id="qa_opt_a_view" type="button" disabled style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">View</button>
+    <button id="qa_opt_a_remove" type="button" style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">Remove</button>
+  </div>
+</div>
+
+<div class="field">
+  <div class="row" style="display:flex;align-items:center;gap:8px">
     <img id="qa_opt_b_preview" class="opt-preview" src="" alt="B preview" />
-        <label style="display:inline-block;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#a0a0a0;cursor:pointer;font-size:13px;color:#0b1724">
-          Browse
-          <input id="qa_opt_b_file" type="file" accept="image/*" style="display:none" />
-        </label>
-        <button id="qa_opt_b_view" disabled style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">View</button>
-    </div>
-    <div class="row" style="display:flex;align-items:center;gap:8px">
+    <button type="button" id="qa_opt_b_browse" style="display:inline-block;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#a0a0a0;cursor:pointer;font-size:13px;color:#0b1724">
+      Browse
+    </button>
+    <input id="qa_opt_b_file" type="file" accept="image/*" style="display:none" />
+    <button id="qa_opt_b_view" type="button" disabled style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">View</button>
+    <button id="qa_opt_b_remove" type="button" style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">Remove</button>
+  </div>
+</div>
+
+<div class="field">
+  <div class="row" style="display:flex;align-items:center;gap:8px">
     <img id="qa_opt_c_preview" class="opt-preview" src="" alt="C preview" />
-        <label style="display:inline-block;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#a0a0a0;cursor:pointer;font-size:13px;color:#0b1724">
-          Browse
-          <input id="qa_opt_c_file" type="file" accept="image/*" style="display:none" />
-        </label>
-        <button id="qa_opt_c_view" disabled style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">View</button>
-    </div>
-    <div class="row" style="display:flex;align-items:center;gap:8px">
+    <button type="button" id="qa_opt_c_browse" style="display:inline-block;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#a0a0a0;cursor:pointer;font-size:13px;color:#0b1724">
+      Browse
+    </button>
+    <input id="qa_opt_c_file" type="file" accept="image/*" style="display:none" />
+    <button id="qa_opt_c_view" type="button" disabled style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">View</button>
+    <button id="qa_opt_c_remove" type="button" style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">Remove</button>
+  </div>
+</div>
+
+<div class="field">
+  <div class="row" style="display:flex;align-items:center;gap:8px">
     <img id="qa_opt_d_preview" class="opt-preview" src="" alt="D preview" />
-        <label style="display:inline-block;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#a0a0a0;cursor:pointer;font-size:13px;color:#0b1724">
-          Browse
-          <input id="qa_opt_d_file" type="file" accept="image/*" style="display:none" />
-        </label>
-        <button id="qa_opt_d_view" disabled style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">View</button>
-    </div>
-    <div class="row" style="display:flex;align-items:center;gap:8px">
+    <button type="button" id="qa_opt_d_browse" style="display:inline-block;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#a0a0a0;cursor:pointer;font-size:13px;color:#0b1724">
+      Browse
+    </button>
+    <input id="qa_opt_d_file" type="file" accept="image/*" style="display:none" />
+    <button id="qa_opt_d_view" type="button" disabled style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">View</button>
+    <button id="qa_opt_d_remove" type="button" style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">Remove</button>
+  </div>
+</div>
+
+<div class="field">
+  <div class="row" style="display:flex;align-items:center;gap:8px">
     <img id="qa_opt_e_preview" class="opt-preview" src="" alt="E preview" />
-        <label style="display:inline-block;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#a0a0a0;cursor:pointer;font-size:13px;color:#0b1724">
-          Browse
-          <input id="qa_opt_e_file" type="file" accept="image/*" style="display:none" />
-        </label>
-        <button id="qa_opt_e_view" disabled style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">View</button>
-    </div>
+    <button type="button" id="qa_opt_e_browse" style="display:inline-block;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#a0a0a0;cursor:pointer;font-size:13px;color:#0b1724">
+      Browse
+    </button>
+    <input id="qa_opt_e_file" type="file" accept="image/*" style="display:none" />
+    <button id="qa_opt_e_view" type="button" disabled style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">View</button>
+    <button id="qa_opt_e_remove" type="button" style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">Remove</button>
+  </div>
+</div>
+
     <div class="row" style="margin-top:8px">
       <label style="display:block;margin-bottom:6px;font-weight:600;color:#0b1724">Correct Answer</label>
       <select id="qa_correct_answer" style="width:120px;padding:6px;border:1px solid #e6e6e9;border-radius:6px">
@@ -98,6 +119,564 @@
         <option value="E">E</option>
       </select>
     </div>
-    <div class="actions"><button id="qaCancel">Cancel</button><button id="qaSave" class="btn-primary">Save</button></div>
+    </div>
+    <div id="qa_save_message" style="display:none;padding:8px 0;font-weight:600"></div>
+    <div class="actions" style="padding-top:8px"><button id="qaCancel">Cancel</button><button id="qaSave" class="btn-primary">Save</button></div>
   </div>
 </div>
+  <script>
+    // Helpers used by the modal initializer
+    const QA_PREVIEW_PLACEHOLDER = 'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%3Crect%20width%3D%22100%25%22%20height%3D%22100%25%22%20fill%3D%22%23fafafa%22/%3E%3C/svg%3E';
+    function _qa_looksLikeUrl(s){
+      if (!s) return false;
+      try{
+        if (/^data:/i.test(s)) return true;
+        if (/^https?:\/\//i.test(s)) return true;
+        if (/^\//.test(s)) return true; // root-relative paths
+        if (/\.(png|jpe?g|gif|svg|webp)(\?.*)?$/i.test(String(s).trim())) return true;
+      }catch(e){}
+      return false;
+    }
+    function _qa_splitUrls(s){ if (!s) return []; return s.split(/\s+|\|,|,\s*/).map(x=>x.trim()).filter(x=>x.length && /https?:\/\//i.test(x)); }
+    function _qa_hasPreview(img){
+      try{
+        if (!img) return false;
+        const srcAttr = (img.getAttribute && img.getAttribute('src')) || '';
+        const src = img.src || srcAttr || '';
+        if (!src || String(src).trim() === '') return false;
+        // Consider data:, http(s), root-relative and common image filenames as valid
+        // Don't treat the UI placeholder as a real preview
+        if (String(src).trim() === String(QA_PREVIEW_PLACEHOLDER).trim()) return false;
+        if (_qa_looksLikeUrl(src)){
+          if (img.complete === true){ try{ if (typeof img.naturalWidth === 'number' && img.naturalWidth > 0) return true; }catch(_){ }
+          }
+          return true;
+        }
+        return false;
+      }catch(e){ return false; }
+    }
+
+    // Update view button visibility for previews inside the modal element
+    window.updateModalViewButtons = function(modalEl){
+      if (!modalEl) modalEl = document;
+      const pairs = [ ['qa_image_preview','qa_image_view'], ['qa_opt_a_preview','qa_opt_a_view'], ['qa_opt_b_preview','qa_opt_b_view'], ['qa_opt_c_preview','qa_opt_c_view'], ['qa_opt_d_preview','qa_opt_d_view'], ['qa_opt_e_preview','qa_opt_e_view'] ];
+      const isValidPreview = (img)=> _qa_hasPreview(img);
+      for (const [p,b] of pairs){
+        const img = modalEl.querySelector('#'+p) || document.getElementById(p);
+        const btn = modalEl.querySelector('#'+b) || document.getElementById(b);
+        const base = p.replace('_preview','');
+        const browse = modalEl.querySelector('#'+base + '_browse') || document.getElementById(base + '_browse');
+        const remove = modalEl.querySelector('#'+base + '_remove') || document.getElementById(base + '_remove');
+        if (!btn && !browse && !remove) continue;
+        try{
+          const visible = isValidPreview(img);
+          if (btn) btn.style.display = visible ? 'inline-block' : 'none';
+          if (remove) remove.style.display = visible ? 'inline-block' : 'none';
+          if (browse) {
+            // Always show Browse so users can change/replace the file even when a preview exists.
+            browse.style.display = 'inline-block';
+          }
+        }catch(e){ if (btn) btn.style.display = 'none'; if (remove) remove.style.display = 'none'; if (browse) browse.style.display = 'inline-block'; }
+      }
+    };
+
+    // Main initializer moved from questions-all.html
+    window.initializeQuestionModalFragment = function(modalEl, mode, row){
+      const title = modalEl.querySelector('#qaModalTitle'); if (title) title.textContent = mode === 'add' ? 'Add Question' : 'Edit Question';
+      // if opening in Add mode, clear any previous values/previews so stale data doesn't persist
+      if (mode === 'add'){
+        try{
+          const clearFields = ['qa_question','qa_long_text','qa_opt_a','qa_opt_b','qa_opt_c','qa_opt_d','qa_opt_e'];
+          for (const id of clearFields){ const el = modalEl.querySelector('#'+id) || document.getElementById(id); if (el) el.value = ''; }
+          const previewIds = ['qa_image_preview','qa_opt_a_preview','qa_opt_b_preview','qa_opt_c_preview','qa_opt_d_preview','qa_opt_e_preview'];
+          for (const id of previewIds){ const p = modalEl.querySelector('#'+id) || document.getElementById(id); if (p){ try{ if (id === 'qa_image_preview'){ p.src = QA_PREVIEW_PLACEHOLDER; p.style.display = 'block'; } else { p.src = QA_PREVIEW_PLACEHOLDER; p.style.display = 'block'; } }catch(e){} } }
+          const fileIds = ['qa_image_file','qa_opt_a_file','qa_opt_b_file','qa_opt_c_file','qa_opt_d_file','qa_opt_e_file'];
+          for (const id of fileIds){ const f = modalEl.querySelector('#'+id) || document.getElementById(id); if (f){ try{ f.value = ''; }catch(e){} } }
+          const hid = modalEl.querySelector('#qa_image_src') || document.getElementById('qa_image_src'); if (hid) hid.value = '';
+          if (window.updateModalViewButtons) updateModalViewButtons(modalEl);
+        }catch(e){}
+      }
+      // set question_id prefix when adding based on current category
+        try{
+          const qidEl = modalEl.querySelector('#question_id');
+          if (mode === 'add' && qidEl){
+            let category = '';
+            try{
+              const h2 = document.querySelector('.main-card h2');
+              if (h2 && h2.textContent) category = h2.textContent.trim();
+            }catch(e){}
+            if (!category && window.adminCategory) category = String(window.adminCategory).trim();
+            if (!category){
+              try{
+                const params = new URLSearchParams(window.location.search);
+                category = params.get('category') || '';
+              }catch(e){}
+            }
+
+            function prefixFromCategory(cat){
+              if (!cat) return '';
+              cat = String(cat).toLowerCase();
+              if (cat.includes('numerical')) return 'NA';
+              if (cat.includes('verbal')) return 'VA';
+              if (cat.includes('clerical')) return 'CA';
+              if (cat.includes('entrepreneur')) return 'ET';
+              if (cat.includes('science')) return 'ST';
+              if (cat.includes('logical')) return 'LR';
+              if (cat.includes('mechanical')) return 'MA';
+              if (cat.includes('interpersonal')) return 'IST';
+              return '';
+            }
+
+            const p = prefixFromCategory(category);
+            if (!p){
+              qidEl.value = '';
+            } else {
+              (async ()=>{
+                try{
+                  const nums = [];
+                  const re = new RegExp('^' + p + '(\\d+)$','i');
+                  for (const r of data){
+                    const idv = (r.question_id || '').toString();
+                    const m = idv.match(re);
+                    if (m){
+                      const n = parseInt(m[1],10);
+                      if (!Number.isNaN(n)) nums.push(n);
+                    }
+                  }
+
+                  nums.sort((a,b)=>a-b);
+                  let next = 1;
+                  for (let i=0;i<nums.length;i++){
+                    if (nums[i] > next) break;
+                    if (nums[i] === next) next++;
+                  }
+
+                  const formatted = String(next).padStart(3,'0');
+                  qidEl.value = p + formatted;
+                }catch(e){
+                  qidEl.value = p + '001';
+                }
+              })();
+            }
+          }
+        }catch(e){}
+      if (mode === 'edit' && row){
+        const qidEl = modalEl.querySelector('#question_id');
+        if (qidEl) qidEl.value = row.question_id || row.questionId || row.id || '';
+
+        try{ modalEl.querySelector('#qa_question').value = row.question || ''; }catch(e){}
+        try{ modalEl.querySelector('#qa_long_text').value = row.long_text || row.longtext || ''; }catch(e){}
+
+        // keep textboxes empty
+        try{ modalEl.querySelector('#qa_opt_a').value = _qa_looksLikeUrl(row.opt_a || '') ? '' : (row.opt_a || ''); }catch(e){}
+        try{ modalEl.querySelector('#qa_opt_b').value = _qa_looksLikeUrl(row.opt_b || '') ? '' : (row.opt_b || ''); }catch(e){}
+        try{ modalEl.querySelector('#qa_opt_c').value = _qa_looksLikeUrl(row.opt_c || '') ? '' : (row.opt_c || ''); }catch(e){}
+        try{ modalEl.querySelector('#qa_opt_d').value = _qa_looksLikeUrl(row.opt_d || '') ? '' : (row.opt_d || ''); }catch(e){}
+        try{ modalEl.querySelector('#qa_opt_e').value = _qa_looksLikeUrl(row.opt_e || '') ? '' : (row.opt_e || ''); }catch(e){}
+      }
+
+      // file browse handlers
+      const fileFields = ['qa_opt_a_file','qa_opt_b_file','qa_opt_c_file','qa_opt_d_file','qa_opt_e_file','qa_image_file'];
+
+      for (const fId of fileFields){
+        const fileEl = modalEl.querySelector('#' + fId) || document.getElementById(fId);
+        if (!fileEl) continue;
+
+        if (fileEl.dataset.boundChange === '1') continue;
+        fileEl.dataset.boundChange = '1';
+
+        fileEl.addEventListener('change', () => {
+          const selectedFile = fileEl.files && fileEl.files[0];
+          if (!selectedFile) return;
+
+          const previewId = fId.replace('_file', '_preview');
+          const previewEl = modalEl.querySelector('#' + previewId) || document.getElementById(previewId);
+
+          const objectUrl = URL.createObjectURL(selectedFile);
+
+          if (previewEl) {
+            previewEl.src = objectUrl;
+            previewEl.style.display = 'block';
+          }
+          const textMap = {
+            qa_opt_a_file: 'qa_opt_a',
+            qa_opt_b_file: 'qa_opt_b',
+            qa_opt_c_file: 'qa_opt_c',
+            qa_opt_d_file: 'qa_opt_d',
+            qa_opt_e_file: 'qa_opt_e',
+          };
+
+          const textId = textMap[fId];
+          if (textId) {
+            const textInput = modalEl.querySelector('#' + textId) || document.getElementById(textId);
+            if (textInput) {
+              textInput.dataset.imageValue = objectUrl || '';
+            }
+          }
+          if (fId === 'qa_image_file') {
+            const hid = modalEl.querySelector('#qa_image_src') || document.getElementById('qa_image_src');
+            if (hid) hid.value = '';
+          }
+
+          if (window.updateModalViewButtons) updateModalViewButtons(modalEl);
+        });
+      }
+
+      // Ensure Browse labels always open the hidden file input even if label behavior is blocked.
+      try{
+        const browseBases = ['qa_image','qa_opt_a','qa_opt_b','qa_opt_c','qa_opt_d','qa_opt_e'];
+        for (const base of browseBases){
+          const browse = modalEl.querySelector('#' + base + '_browse') || document.getElementById(base + '_browse');
+          const file = modalEl.querySelector('#' + base + '_file') || document.getElementById(base + '_file');
+          if (!browse || !file) continue;
+
+          if (!browse.dataset.boundBrowse) {
+            browse.dataset.boundBrowse = '1';
+            browse.addEventListener('click', () => {
+              file.click();
+            });
+          }
+        }
+      }catch(e){ /* noop */ }
+
+      // wire Remove buttons to clear previews and file inputs
+      const removeIds = ['qa_image','qa_opt_a','qa_opt_b','qa_opt_c','qa_opt_d','qa_opt_e'];
+      for (const base of removeIds){
+        const rem = modalEl.querySelector('#'+base + '_remove') || document.getElementById(base + '_remove');
+        if (!rem) continue;
+        rem.addEventListener('click', ()=>{
+          try{
+            const fileEl = modalEl.querySelector('#'+base + '_file') || document.getElementById(base + '_file');
+            if (fileEl){ try{ fileEl.value = ''; }catch(e){} }
+            const previewEl = modalEl.querySelector('#'+base + '_preview') || document.getElementById(base + '_preview');
+            if (previewEl){ try{ if (base === 'qa_image'){ previewEl.src = QA_PREVIEW_PLACEHOLDER; previewEl.style.display = 'block'; } else { previewEl.src = QA_PREVIEW_PLACEHOLDER; previewEl.style.display = 'block'; } }catch(e){} }
+            if (base === 'qa_image'){
+              const hid = modalEl.querySelector('#qa_image_src') || document.getElementById('qa_image_src'); if (hid) hid.value = '';
+            }
+            if (window.updateModalViewButtons) updateModalViewButtons(modalEl);
+          }catch(e){ console.error('remove handler failed', e); }
+        });
+      }
+
+      // attach view handlers
+      const views = ['qa_opt_a_view','qa_opt_b_view','qa_opt_c_view','qa_opt_d_view','qa_opt_e_view','qa_image_view'];
+      for (const v of views){ const btn = modalEl.querySelector('#'+v) || document.getElementById(v); if (!btn) continue; btn.addEventListener('click', ()=>{ const pid = v.replace('_view','_preview'); const prev = modalEl.querySelector('#'+pid) || document.getElementById(pid); if (prev && prev.src) window.open(prev.src,'_blank'); }); }
+
+      // cancel/save wiring
+      const cancelBtn = modalEl.querySelector('#qaCancel') || document.getElementById('qaCancel');
+      if (cancelBtn) cancelBtn.addEventListener('click', ()=>{
+        try{
+          // Reset modal state for next open: reinitialize as 'add'
+          try{ if (window.initializeQuestionModalFragment) initializeQuestionModalFragment(modalEl, 'add'); }catch(_){ }
+          // then remove/hide the modal
+          const container = cancelBtn.closest && cancelBtn.closest('.qa-modal') ? cancelBtn.closest('.qa-modal') : modalEl;
+          if (container && container.parentNode) container.parentNode.removeChild(container);
+          else if (container) container.style.display = 'none';
+        }catch(e){ try{ modalEl.style.display = 'none'; }catch(_){} }
+      });
+      
+      async function uploadImageFile(file, category, assetType) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("category", category);
+        formData.append("asset_type", assetType);
+
+        const questionIdEl = modalEl.querySelector('#question_id') || document.getElementById('question_id');
+        const questionId = questionIdEl ? questionIdEl.value.trim() : '';
+        formData.append("question_id", questionId);
+
+        const res = await fetch(`${location.protocol}//${location.hostname}:8000/upload-question-image`, {
+          method: "POST",
+          body: formData
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.detail || data.error || "Upload failed");
+        }
+
+        return data.public_url;
+      }
+
+    const saveBtn = modalEl.querySelector('#qaSave') || document.getElementById('qaSave');
+      if (saveBtn) saveBtn.addEventListener('click', async ()=>{
+        try{ console.debug('qaSave clicked', {mode: mode, row: row}); }catch(_){ }
+
+        try{ saveBtn.disabled = true; }catch(e){}
+        const _origSaveText = saveBtn.textContent || 'Save';
+        try{ saveBtn.textContent = 'Saving...'; }catch(e){}
+
+        let reloadScheduled = false;
+
+        const correctSel = modalEl.querySelector('#qa_correct_answer') || document.getElementById('qa_correct_answer');
+        const correctErr = modalEl.querySelector('#qa_correct_error') || document.getElementById('qa_correct_error');
+        if (correctErr) correctErr.style.display = 'none';
+
+        if (correctSel && !correctSel.value){
+          if (correctErr){
+            correctErr.textContent = 'Select a correct answer';
+            correctErr.style.display = 'block';
+          } else {
+            const msgEl = modalEl.querySelector('#qa_save_message') || document.getElementById('qa_save_message');
+            if (msgEl){
+              msgEl.textContent = 'Select a correct answer';
+              msgEl.style.display = 'block';
+              msgEl.style.color = '#b00020';
+            } else {
+              alert('Select a correct answer');
+            }
+          }
+          saveBtn.disabled = false;
+          saveBtn.textContent = _origSaveText;
+          return;
+        }
+
+        let createdBy = '';
+        const msgEl = modalEl.querySelector('#qa_save_message') || document.getElementById('qa_save_message');
+        const setMsg = (text, ok=false)=>{
+          if (!msgEl){
+            try{ alert(text); }catch(_){}
+            return;
+          }
+          msgEl.textContent = text;
+          msgEl.style.display = 'block';
+          msgEl.style.color = ok ? '#0b7a3a' : '#b00020';
+        };
+
+        const getVal = (selector) => {
+          const el = modalEl.querySelector(selector) || document.getElementById(selector.replace('#', ''));
+          return (el?.value || '').trim();
+        };
+
+        const hasPreview = (selector) => {
+          const img = modalEl.querySelector(selector) || document.getElementById(selector.replace('#', ''));
+          return _qa_hasPreview(img);
+        };
+
+        // Question validation: text OR image only, not both
+        const hasQuestionText = !!(getVal('#qa_question') || getVal('#qa_long_text'));
+        const hasQuestionImage = hasPreview('#qa_image_preview');
+
+        if (hasQuestionText && hasQuestionImage) {
+          setMsg('You can only use either a text question or an image question, not both.');
+          saveBtn.disabled = false;
+          saveBtn.textContent = _origSaveText;
+          return;
+        }
+
+        // Option A-E validation: text OR image only, not both
+        const optionRules = [
+          { label: 'A', text: '#qa_opt_a', preview: '#qa_opt_a_preview' },
+          { label: 'B', text: '#qa_opt_b', preview: '#qa_opt_b_preview' },
+          { label: 'C', text: '#qa_opt_c', preview: '#qa_opt_c_preview' },
+          { label: 'D', text: '#qa_opt_d', preview: '#qa_opt_d_preview' },
+          { label: 'E', text: '#qa_opt_e', preview: '#qa_opt_e_preview' },
+        ];
+
+        for (const opt of optionRules) {
+          const hasText = !!getVal(opt.text);
+          const hasImage = hasPreview(opt.preview);
+
+          if (hasText && hasImage) {
+            setMsg(`Option ${opt.label} can only use either text or image, not both.`);
+            saveBtn.disabled = false;
+            saveBtn.textContent = _origSaveText;
+            return;
+          }
+        }
+
+        try{
+          const profile = JSON.parse(sessionStorage.getItem('user_profile') || '{}');
+          createdBy = profile.full_name || profile.name || profile.email || sessionStorage.getItem('user_email') || '';
+        }catch(e){
+          createdBy = sessionStorage.getItem('user_email') || '';
+        } 
+
+        try{
+          let category = '';
+          try{
+            const h2 = document.querySelector('.main-card h2');
+            if (h2 && h2.textContent && h2.textContent !== 'All Questions') category = h2.textContent.trim();
+          }catch(e){}
+          try{
+            const params = new URLSearchParams(window.location.search);
+            if (!category) category = params.get('category') || '';
+          }catch(e){}
+
+          const qFile = modalEl.querySelector('#qa_image_file')?.files?.[0] || null;
+          const aFile = modalEl.querySelector('#qa_opt_a_file')?.files?.[0] || null;
+          const bFile = modalEl.querySelector('#qa_opt_b_file')?.files?.[0] || null;
+          const cFile = modalEl.querySelector('#qa_opt_c_file')?.files?.[0] || null;
+          const dFile = modalEl.querySelector('#qa_opt_d_file')?.files?.[0] || null;
+          const eFile = modalEl.querySelector('#qa_opt_e_file')?.files?.[0] || null;
+
+          const questionText = ((modalEl.querySelector('#qa_question') || document.getElementById('qa_question'))?.value || '').trim();
+          const longText = ((modalEl.querySelector('#qa_long_text') || document.getElementById('qa_long_text'))?.value || '').trim();
+
+          const optionAText = ((modalEl.querySelector('#qa_opt_a') || document.getElementById('qa_opt_a'))?.value || '').trim();
+          const optionBText = ((modalEl.querySelector('#qa_opt_b') || document.getElementById('qa_opt_b'))?.value || '').trim();
+          const optionCText = ((modalEl.querySelector('#qa_opt_c') || document.getElementById('qa_opt_c'))?.value || '').trim();
+          const optionDText = ((modalEl.querySelector('#qa_opt_d') || document.getElementById('qa_opt_d'))?.value || '').trim();
+          const optionEText = ((modalEl.querySelector('#qa_opt_e') || document.getElementById('qa_opt_e'))?.value || '').trim();
+
+          let imageUrl =
+            ((modalEl.querySelector('#qa_image_src') || document.getElementById('qa_image_src'))?.value) ||
+            row?.image_url ||
+            row?.image ||
+            row?.question_image ||
+            null;
+
+          let optA = row?.opt_a || '';
+          let optB = row?.opt_b || '';
+          let optC = row?.opt_c || '';
+          let optD = row?.opt_d || '';
+          let optE = row?.opt_e || null;
+
+          // VALIDATION: question = text OR image only
+          const hasQuestionText = !!(questionText || longText);
+          const hasQuestionImage = !!(qFile || imageUrl);
+
+          if (hasQuestionText && hasQuestionImage) {
+            setMsg("You can't have both image question and question text/long text at the same time. Use only one.");
+            saveBtn.disabled = false;
+            saveBtn.textContent = _origSaveText;
+            return;
+          }
+
+          // VALIDATION: options A-E = text OR image only
+          const optionChecks = [
+            { label: 'A', hasText: !!optionAText, hasImage: !!(aFile || optA) },
+            { label: 'B', hasText: !!optionBText, hasImage: !!(bFile || optB) },
+            { label: 'C', hasText: !!optionCText, hasImage: !!(cFile || optC) },
+            { label: 'D', hasText: !!optionDText, hasImage: !!(dFile || optD) },
+            { label: 'E', hasText: !!optionEText, hasImage: !!(eFile || optE) },
+          ];
+
+          for (const opt of optionChecks) {
+            if (opt.hasText && opt.hasImage) {
+              setMsg(`Option ${opt.label} can't have both text and image at the same time. Use only one.`);
+              saveBtn.disabled = false;
+              saveBtn.textContent = _origSaveText;
+              return;
+            }
+          }
+
+          if (qFile) imageUrl = await uploadImageFile(qFile, category, 'question');
+          if (aFile) optA = await uploadImageFile(aFile, category, 'opt_a');
+          if (bFile) optB = await uploadImageFile(bFile, category, 'opt_b');
+          if (cFile) optC = await uploadImageFile(cFile, category, 'opt_c');
+          if (dFile) optD = await uploadImageFile(dFile, category, 'opt_d');
+          if (eFile) optE = await uploadImageFile(eFile, category, 'opt_e');
+
+          const payload = {
+            question_id: ((modalEl.querySelector('#question_id') || document.getElementById('question_id')) && (modalEl.querySelector('#question_id') || document.getElementById('question_id')).value) || null,
+            question: (modalEl.querySelector('#qa_question') || document.getElementById('qa_question')).value,
+            long_text: (modalEl.querySelector('#qa_long_text') || document.getElementById('qa_long_text')) ? (modalEl.querySelector('#qa_long_text') || document.getElementById('qa_long_text')).value : null,
+            opt_a: optA,
+            opt_b: optB,
+            opt_c: optC,
+            opt_d: optD,
+            opt_e: optE,
+            answer: ((modalEl.querySelector('#qa_correct_answer') || document.getElementById('qa_correct_answer')) && (modalEl.querySelector('#qa_correct_answer') || document.getElementById('qa_correct_answer')).value) || null,
+            image_url: imageUrl,
+            created_at: (new Date()).toISOString(),
+            created_by: createdBy || null
+          };
+
+          if (mode === 'add'){
+            const r = await fetch(`${location.protocol}//${location.hostname}:8000/questions?category=${encodeURIComponent(category)}`, {
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body: JSON.stringify(payload)
+            });
+
+            if (!r.ok){
+              let text = r.status + '';
+              try{
+                const body = await r.text();
+                if (body) text = body;
+              }catch(_){}
+              setMsg('Error saving: ' + text, false);
+              return;
+            }
+
+            setMsg('Added successfully', true);
+            reloadScheduled = true;
+
+            try {
+              if (typeof window.loadQuestions === 'function') {
+                await window.loadQuestions(category);
+              }
+            } catch (e) {
+              console.error('loadQuestions failed after add', e);
+            }
+
+            try {
+              const container = modalEl.closest('.qa-modal') || modalEl;
+              if (container && container.parentNode) container.parentNode.removeChild(container);
+              else modalEl.style.display = 'none';
+            } catch (e) {}
+          } else {
+            const id = row && (row.id || row.question_id);
+            const r = await fetch(`${location.protocol}//${location.hostname}:8000/questions/${encodeURIComponent(id)}?category=${encodeURIComponent(category)}`, {
+              method:'PATCH',
+              headers:{'Content-Type':'application/json'},
+              body: JSON.stringify(payload)
+            });
+
+            if (!r.ok){
+              let text = r.status + '';
+              try{
+                const body = await r.text();
+                if (body) text = body;
+              }catch(_){}
+              setMsg('Error updating: ' + text, false);
+              return;
+            }
+
+            setMsg('Updated successfully', true);
+            reloadScheduled = true;
+            setTimeout(()=> location.reload(), 800);
+          }
+
+        }catch(e){
+          console.error(e);
+          setMsg('Error saving: ' + (e.message || 'Unknown error'), false);
+        }finally{
+          try{
+            if (!reloadScheduled){
+              saveBtn.disabled = false;
+              saveBtn.textContent = _origSaveText;
+            }
+          }catch(_){}
+        }
+      });
+
+      // finally ensure view buttons are correct
+      if (window.updateModalViewButtons) updateModalViewButtons(modalEl);
+    };
+
+    // Global delegated handler: ensure any Cancel button closes its closest .qa-modal
+    (function(){
+      document.addEventListener('click', function(e){
+        try{
+          const t = e.target;
+          if (!t) return;
+          if (t.id === 'qaCancel' || (t.matches && t.matches('#qaCancel'))){
+            // find modal container
+            const container = t.closest && t.closest('.qa-modal') ? t.closest('.qa-modal') : document.getElementById('qaModal');
+            if (container){
+              try{
+                // Reset modal state for next open
+                if (window.initializeQuestionModalFragment) initializeQuestionModalFragment(container, 'add');
+              }catch(e){ /* ignore */ }
+              // then remove container from DOM
+              if (container.parentNode){ container.parentNode.removeChild(container); }
+              else { container.style.display = 'none'; }
+            }
+          }
+        }catch(_){ }
+      }, false);
+    })();
+  </script>

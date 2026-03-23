@@ -104,7 +104,8 @@
         sessionStorage.setItem('user_profile', JSON.stringify(profile && Object.keys(profile).length ? profile : user));
 
         if (usertype === 'admin'){
-          window.location.href = 'questions-all.html';
+          // Ensure admin sees All Questions first after login
+          window.location.href = 'questions-all.html?category=' + encodeURIComponent('All Questions');
           return;
         }
 

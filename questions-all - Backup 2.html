@@ -1,0 +1,688 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Questions — All</title>
+  <link rel="stylesheet" href="admin.css" />
+  <style>
+    .category-links a.category-link{display:block;margin-bottom:8px;padding:8px 10px;border-radius:8px;text-align:center;color:#7c3aed;background:linear-gradient(90deg, rgba(124,58,237,0.06), rgba(6,182,212,0.02));border:1px solid rgba(124,58,237,0.12);text-decoration:none;font-weight:700}
+    .category-links a.category-link.active{background:linear-gradient(90deg,#7c3aed,#06b6d4);color:#fff;border-color:transparent;box-shadow:0 8px 22px rgba(124,58,237,0.12)}
+  </style>
+  <style>
+    /* Ensure hover glow wins: inline rules loaded after admin.css */
+    .sidebar .category-links a.category-link{position:relative}
+    .sidebar .category-links a.category-link:hover,
+    .sidebar .category-links a.category-link:focus,
+    .sidebar .category-links a.category-link:focus-visible{
+      transform:translateY(-3px) !important;
+      border-color: rgba(124,58,237,0.6) !important;
+      color: #07182a !important;
+      background: linear-gradient(90deg, rgba(124,58,237,0.10), rgba(6,182,212,0.06)) !important;
+      box-shadow: 0 12px 36px rgba(124,58,237,0.12), 0 0 18px rgba(6,182,212,0.08) inset !important;
+    }
+    .sidebar .category-links a.category-link:hover::before,
+    .sidebar .category-links a.category-link:focus::before,
+    .sidebar .category-links a.category-link:focus-visible::before{
+      opacity: 0.18 !important;
+      transform: scale(1.02) !important;
+    }
+  </style>
+</head>
+<body>
+  <script src="admin-header.v2.js"></script>
+  <script src="admin-modal.js"></script>
+
+  <div class="layout">
+
+    <main class="main-card" id="adminContent">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <h2 style="margin:0">All Questions</h2>
+        <div>
+          <button id="addQuestionBtn" class="btn-primary" style="margin-right:8px;">Add Question</button>
+          <button id="refreshQuestionsBtn" class="btn-primary" style="margin-left:8px;">Refresh</button>
+        </div>
+      </div>
+      <div id="questionsMessage" class="muted" style="margin-bottom:12px"></div>
+      <div style="overflow:visible">
+        <table id="questionsTable">
+          <colgroup>
+            <col style="width:80px" />
+            <col style="width:40%" />
+            <col />
+            <col style="width:180px" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Question ID</th>
+              <th>Question</th>
+              <th>Long Text</th>
+              <th class="actions-header">Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const backendBase = `${location.protocol}//${location.hostname}:8000`;
+    function syncAccent(){
+      const hb = document.getElementById('adminHeaderBar');
+      if (!hb) return;
+      document.documentElement.style.setProperty('--admin-header-height', hb.offsetHeight + 'px');
+    }
+    window.addEventListener('load', syncAccent);
+    window.addEventListener('resize', ()=> setTimeout(syncAccent,50));
+
+    (function highlightCategory(){
+      const links = Array.from(document.querySelectorAll('.category-links a.category-link'));
+      if (!links.length) return;
+      try{
+        const params = new URLSearchParams(window.location.search);
+        const cat = params.get('category');
+        let matched = null;
+        if (cat){
+          matched = links.find(a => {
+            const href = a.getAttribute('href') || '';
+            return href.includes('category=' + encodeURIComponent(cat)) || href.includes('category=' + cat);
+          });
+        }
+        if (!matched){
+          matched = links.find(a => (a.getAttribute('href')||'').split('?')[0].endsWith('questions-all.html')) || links[0];
+        }
+        if (matched) matched.classList.add('active');
+      }catch(e){ links[0] && links[0].classList.add('active'); }
+    })();
+
+    // Fetch Table_Questions via backend proxy
+    window.loadQuestions = async function loadQuestions(category = ''){
+      const msgEl = document.getElementById('questionsMessage');
+      try{
+        const h2 = document.querySelector('.main-card h2');
+        if (h2) h2.textContent = category && category !== '' ? category : 'All Questions';
+        const addBtn = document.getElementById('addQuestionBtn');
+        if (addBtn){
+          if (category && category !== '') addBtn.style.display = 'inline-block';
+          else addBtn.style.display = 'none';
+        }
+      }catch(e){}
+      const tbody = document.querySelector('#questionsTable tbody');
+      try{
+        msgEl.textContent = 'Loading questions…';
+        const res = await fetch(`${backendBase}/questions?category=${encodeURIComponent(category || '')}`);
+        if (!res.ok){ msgEl.textContent = 'Failed to load questions: ' + res.status; return }
+        const data = await res.json();
+        if (!Array.isArray(data)){
+          msgEl.textContent = 'No data returned';
+          return;
+        }
+        msgEl.textContent = '';
+        tbody.innerHTML = '';
+        for (const row of data){
+          const qid = row.question_id || row.id || '';
+          const qtxt = row.question || row.question_text || '';
+          const opts = [row.opt_a, row.opt_b, row.opt_c, row.opt_d, row.opt_e].filter(Boolean);
+
+          const tr = document.createElement('tr');
+
+          // Question ID cell
+          const tdId = document.createElement('td');
+          tdId.textContent = qid;
+          tr.appendChild(tdId);
+
+          // Question cell (text or image links)
+          const tdQ = document.createElement('td');
+          if (looksLikeUrl(qtxt)){
+            const urls = splitUrls(qtxt);
+            for (const u of urls){
+              const img = document.createElement('img');
+              img.className = 'qimg';
+              img.src = u;
+              img.alt = 'question image';
+              tdQ.appendChild(img);
+            }
+          } else {
+            tdQ.textContent = qtxt;
+          }
+          tr.appendChild(tdQ);
+
+          // Long text cell (from Table_Questions.long_text)
+          const tdLong = document.createElement('td');
+          tdLong.className = 'longtext-cell';
+          tdLong.textContent = row.long_text || row.longtext || '';
+          tr.appendChild(tdLong);
+
+          // Actions cell (Edit / Delete)
+          const tdActions = document.createElement('td');
+          tdActions.className = 'actions-cell';
+          const viewBtn = document.createElement('button');
+          viewBtn.className = 'icon-btn view-btn';
+          viewBtn.title = 'View';
+          viewBtn.innerHTML = '🔍';
+          viewBtn.addEventListener('click', ()=> openViewModal(row));
+          viewBtn.setAttribute('aria-label', 'View question');
+
+          const editBtn = document.createElement('button');
+          editBtn.className = 'icon-btn edit-btn';
+          editBtn.title = 'Edit';
+          editBtn.innerHTML = '✏️';
+          editBtn.addEventListener('click', ()=> openModal('edit', row));
+          editBtn.setAttribute('aria-label', 'Edit question');
+
+          const deleteBtn = document.createElement('button');
+          deleteBtn.className = 'icon-btn delete-btn';
+          deleteBtn.title = 'Delete';
+          deleteBtn.setAttribute('aria-label','Delete question');
+          deleteBtn.innerHTML = '🗑️';
+          deleteBtn.addEventListener('click', async ()=>{
+            const idPart = row.id ? ` (internal id: ${row.id})` : '';
+            if (!confirm(`Delete question ${qid}${idPart} — are you sure?`)) return;
+            try{
+              const delRes = await fetch(`${backendBase}/questions/${encodeURIComponent(row.id)}` , { method: 'DELETE' });
+              if (!delRes.ok){ alert('Delete failed: ' + delRes.status); return; }
+              // remove row from table
+              tbody.removeChild(tr);
+            }catch(e){ console.error(e); alert('Delete error'); }
+          });
+
+          tdActions.appendChild(viewBtn);
+          tdActions.appendChild(editBtn);
+          tdActions.appendChild(deleteBtn);
+          tr.appendChild(tdActions);
+
+          tbody.appendChild(tr);
+        }
+      }catch(e){
+        msgEl.textContent = 'Error loading questions';
+        console.error(e);
+      }
+    };
+
+    // initial load: prefer `category` query parameter, else `window.adminCategory`, else all
+    try{
+      const params = new URLSearchParams(window.location.search);
+      let cat = params.get('category');
+      if (!cat && window.adminCategory) cat = String(window.adminCategory).trim();
+      if (!cat || cat === 'All Questions') cat = '';
+      window.loadQuestions(cat);
+    }catch(e){ console.error('initial load category parse failed', e); window.loadQuestions(''); }
+
+    // wire refresh button to reload table only (no full page reload)
+    try{
+      const rbtn = document.getElementById('refreshQuestionsBtn');
+      if (rbtn) rbtn.addEventListener('click', ()=> {
+        rbtn.disabled = true; rbtn.textContent = 'Refreshing…';
+        const h2 = document.querySelector('.main-card h2');
+        const cat = (h2 && h2.textContent && h2.textContent !== 'All Questions') ? h2.textContent : '';
+        Promise.resolve(window.loadQuestions(cat)).finally(()=>{ rbtn.disabled = false; rbtn.textContent = 'Refresh'; });
+      });
+    }catch(e){ console.error('refresh button wiring failed', e); }
+
+    try{
+      const addBtn = document.getElementById('addQuestionBtn');
+      if (addBtn){
+        addBtn.addEventListener('click', ()=> { 
+          try{ openModal('add'); }catch(err){
+            // fallback: navigate to fragment if modal initializer isn't present
+            console.error('openModal failed, falling back to navigation', err);
+            location.href = 'add-question-modal.html';
+          }
+        });
+      }
+    }catch(e){ console.error('add button wiring failed', e); }
+
+    // --- Modal logic for Add / Edit ---
+    async function openModal(mode, row){
+      // Try to use embedded modal fragment if present (copied from update-question-modal.html)
+      try{
+        const existing = document.getElementById('qaModal');
+        if (existing){
+          existing.style.display = 'block';
+          try{ initializeQuestionModal(existing, mode, row); }catch(e){ console.error('initializeQuestionModal failed', e); }
+          // Ensure View buttons are hidden for Add mode (they should only appear when a preview exists)
+          if (mode === 'add'){
+            try{
+              const viewIds = ['qa_image_view','qa_opt_a_view','qa_opt_b_view','qa_opt_c_view','qa_opt_d_view','qa_opt_e_view'];
+              for (const id of viewIds){ const b = existing.querySelector('#'+id) || document.getElementById(id); if (b) b.style.display = 'none'; }
+            }catch(e){ /* ignore */ }
+          } else {
+            if (window.updateModalViewButtons) updateModalViewButtons(existing);
+          }
+          return;
+        }
+      }catch(e){ /* ignore and fall back */ }
+
+      // Fallback: create a minimal inline modal (previous behavior)
+      let existing = document.getElementById('qaModal');
+      if (existing) existing.remove();
+      const wrapper = document.createElement('div'); wrapper.className='qa-modal'; wrapper.id='qaModal';
+      const panel = document.createElement('div'); panel.className='panel';
+      panel.innerHTML = `
+        <h3>${mode==='add'?'Add Question':'Edit Question'}</h3>
+        <div class="row"><input id="question_id" placeholder="question_id" disabled /></div>
+        <div class="row"><input id="qa_question" placeholder="Question text or image URL" /></div>
+        <div class="row"><input id="qa_opt_a" placeholder="Option A" /><input id="qa_opt_b" placeholder="Option B" /></div>
+        <div class="row"><input id="qa_opt_c" placeholder="Option C" /><input id="qa_opt_d" placeholder="Option D" /></div>
+        <div class="row"><input id="qa_opt_e" placeholder="Option E (optional)" /></div>
+        <div class="actions"><button id="qaCancel">Cancel</button><button id="qaSave" class="btn-primary">Save</button></div>
+      `;
+      wrapper.appendChild(panel);
+      if (window.updateModalViewButtons) updateModalViewButtons(wrapper);
+      document.body.appendChild(wrapper);
+
+      // initialize modal fields (use the same initializer so question_id logic runs)
+      document.body.appendChild(wrapper);
+      try{ initializeQuestionModal(wrapper, mode, row); }catch(e){ /* ignore */ }
+      if (mode==='edit' && row){
+        try{ document.getElementById('qa_question').value = row.question || ''; }catch(e){}
+        try{ document.getElementById('qa_opt_a').value = row.opt_a || ''; }catch(e){}
+        try{ document.getElementById('qa_opt_b').value = row.opt_b || ''; }catch(e){}
+        try{ document.getElementById('qa_opt_c').value = row.opt_c || ''; }catch(e){}
+        try{ document.getElementById('qa_opt_d').value = row.opt_d || ''; }catch(e){}
+        try{ document.getElementById('qa_opt_e').value = row.opt_e || ''; }catch(e){}
+      }
+      document.getElementById('qaCancel').addEventListener('click', ()=> wrapper.remove());
+      document.getElementById('qaSave').addEventListener('click', async ()=>{
+        const payload = {
+            question: document.getElementById('qa_question').value,
+          opt_a: document.getElementById('qa_opt_a').value,
+          opt_b: document.getElementById('qa_opt_b').value,
+          opt_c: document.getElementById('qa_opt_c').value,
+          opt_d: document.getElementById('qa_opt_d').value,
+            opt_e: document.getElementById('qa_opt_e').value || null,
+            image_url: (document.getElementById('qa_image_src') && document.getElementById('qa_image_src').value) || null,
+            question_id: (document.getElementById('question_id') && document.getElementById('question_id').value) || null,
+        };
+        try{
+          if (mode==='add'){
+            const r = await fetch(`${backendBase}/questions?category=${encodeURIComponent('')}`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            if (!r.ok){ alert('Create failed: '+r.status); return; }
+            location.reload();
+          } else {
+            const r = await fetch(`${backendBase}/questions/${encodeURIComponent(row.id)}?category=${encodeURIComponent('')}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            if (!r.ok){ alert('Update failed: '+r.status); return; }
+            location.reload();
+          }
+        }catch(e){ console.error(e); alert('Save error'); }
+      });
+    }
+
+    // Add button removed on this page; Add modal not available here
+
+    function looksLikeUrl(s){ if (!s) return false; return /https?:\/\//i.test(s);
+    }
+    function splitUrls(s){ if (!s) return []; // split common delimiters
+      // URLs may be separated by spaces or | or commas
+      return s.split(/\s+|\|,|,\s*/).map(x=>x.trim()).filter(x=>x.length && /https?:\/\//i.test(x));
+    }
+
+    // View modal loader (fetches view-question-modal.html and populates it)
+    async function openViewModal(row){
+      let existing = document.getElementById('viewQaModal'); if (existing) existing.remove();
+      try{
+        const modalUrl = new URL('view-question-modal.html', location.href).toString();
+        let res = null;
+        try{ res = await fetch(modalUrl); }catch(err){ res = null; }
+        if (!res || !res.ok){ const rootUrl = `${location.origin}/view-question-modal.html`; try{ res = await fetch(rootUrl); }catch(err){ res = null; } }
+        if (!res || !res.ok){ const code = res ? res.status : 'network-error'; throw new Error('Failed to load view modal ('+code+')'); }
+        const html = await res.text(); const wrapper = document.createElement('div'); wrapper.innerHTML = html; document.body.appendChild(wrapper);
+        const modalEl = document.getElementById('viewQaModal'); if (!modalEl) throw new Error('View modal not found');
+        modalEl.style.display = 'flex'; modalEl.style.position = 'fixed'; modalEl.style.inset = '0'; modalEl.style.alignItems = 'center'; modalEl.style.justifyContent = 'center'; modalEl.style.zIndex = '13000';
+        const panelEl = modalEl.querySelector('.panel'); if (panelEl){ panelEl.style.maxHeight = '80vh'; panelEl.style.overflow = 'auto'; }
+        const setText = (id, text)=>{ const el = document.getElementById(id); if (!el) return; if (looksLikeUrl(text)){ const a = document.createElement('a'); a.href = text; a.textContent = text; a.target='_blank'; el.innerHTML=''; el.appendChild(a); } else { el.textContent = text || ''; } };
+        setText('v_question', row.question || '');
+        setText('v_long_text', row.long_text || row.longtext || '');
+        const img = document.getElementById('v_image_preview'); if (img){ const src = row.image_url || row.image || row.question_image || ''; if (src){ img.src = src; img.style.display = 'block'; } else { img.style.display = 'none'; } }
+        const choicesEl = document.getElementById('v_choices'); if (choicesEl){ choicesEl.innerHTML = ''; const opts = [{k:'A',v:row.opt_a},{k:'B',v:row.opt_b},{k:'C',v:row.opt_c},{k:'D',v:row.opt_d},{k:'E',v:row.opt_e}]; for (const o of opts){ if (!o.v) continue; const c = document.createElement('div'); c.className='choice'; const textIsUrl = looksLikeUrl(o.v); if (textIsUrl){ const im = document.createElement('img'); im.className='choice-img'; im.src = o.v; im.alt = 'choice '+o.k; c.appendChild(im); const span = document.createElement('div'); span.textContent = o.k + ': (image)'; c.appendChild(span); } else { const span = document.createElement('div'); span.textContent = o.k + ': ' + o.v; c.appendChild(span); } choicesEl.appendChild(c); } }
+        const ca = document.getElementById('v_correct_answer'); if (ca) ca.textContent = row.correct_answer || row.answer || row.correct || '';
+        const closeBtn = document.getElementById('vClose'); if (closeBtn) closeBtn.addEventListener('click', ()=>{ try{ modalEl.remove(); }catch(e){} });
+        const editBtn = document.getElementById('vEdit'); if (editBtn) editBtn.addEventListener('click', ()=>{ try{ modalEl.remove(); }catch(e){} openModal('edit', row); });
+        const delBtn = document.getElementById('vDelete'); if (delBtn) delBtn.addEventListener('click', ()=>{ try{ modalEl.remove(); }catch(e){} if (!confirm('Delete this question?')) return; (async ()=>{ try{ const deleteKey = (row.question_id && String(row.question_id).trim()) || (row.id && String(row.id).trim()); if (!deleteKey){ alert('Cannot determine which row to delete (missing id/question_id)'); return; } const url = `${backendBase}/questions/${encodeURIComponent(deleteKey)}?category=${encodeURIComponent('')}`; const delRes = await fetch(url, { method:'DELETE' }); if (!delRes.ok){ let bodyText=''; try{ bodyText = await delRes.text(); }catch(e){ bodyText = '<could not read body>'; } alert('Delete failed: '+delRes.status + '\n' + bodyText); return; } location.reload(); }catch(e){ console.error(e); alert('Delete error'); } })(); });
+      }catch(e){ console.error('openViewModal error', e); alert('Could not open view modal: '+(e && e.message? e.message : String(e))); }
+    }
+
+    function escapeHtml(s){ if (s === null || typeof s === 'undefined') return ''; return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[c]); }
+
+    // Floating toolbar: ensure CSS knows its height for layout adjustments
+    (function updateHeaderVars(){
+      const hb = document.getElementById('adminHeaderBar');
+      const main = document.querySelector('.main-card');
+      function apply(){
+        if (!hb) return;
+        // header sits at the top of the page; expose its height
+        document.documentElement.style.setProperty('--admin-header-height', hb.offsetHeight + 'px');
+        // ensure main content has enough top padding so header/nav doesn't overlap
+        if (main) main.style.paddingTop = `calc(var(--admin-header-height) + 24px)`;
+      }
+      window.addEventListener('load', ()=> setTimeout(apply,50));
+      window.addEventListener('resize', ()=> setTimeout(apply,80));
+      setTimeout(apply,200); setTimeout(apply,800);
+    })();
+  </script>
+  <script>
+    function initializeQuestionModal(modalEl, mode, row){
+      const title = modalEl.querySelector('#qaModalTitle'); if (title) title.textContent = mode === 'add' ? 'Add Question' : 'Edit Question';
+      // set question_id prefix when adding based on current category
+      // if opening in Add mode, clear previous values/previews so stale data doesn't appear
+      if (mode === 'add'){
+        try{
+          const clearFields = ['qa_question','qa_long_text','qa_opt_a','qa_opt_b','qa_opt_c','qa_opt_d','qa_opt_e'];
+          for (const id of clearFields){ const el = modalEl.querySelector('#'+id) || document.getElementById(id); if (el) el.value = ''; }
+          const previewIds = ['qa_image_preview','qa_opt_a_preview','qa_opt_b_preview','qa_opt_c_preview','qa_opt_d_preview','qa_opt_e_preview'];
+          for (const id of previewIds){ const p = modalEl.querySelector('#'+id) || document.getElementById(id); if (p){ try{ p.src = ''; p.style.display = 'none'; }catch(e){} } }
+          const fileIds = ['qa_image_file','qa_opt_a_file','qa_opt_b_file','qa_opt_c_file','qa_opt_d_file','qa_opt_e_file'];
+          for (const id of fileIds){ const f = modalEl.querySelector('#'+id) || document.getElementById(id); if (f){ try{ f.value = ''; }catch(e){} } }
+          const hid = modalEl.querySelector('#qa_image_src') || document.getElementById('qa_image_src'); if (hid) hid.value = '';
+          if (window.updateModalViewButtons) updateModalViewButtons(modalEl);
+        }catch(e){}
+      }
+      try{
+        const qidEl = modalEl.querySelector('#question_id');
+        if (mode === 'add' && qidEl){
+          let category = '';
+          try{ const h2 = document.querySelector('.main-card h2'); if (h2 && h2.textContent) category = h2.textContent.trim(); }catch(e){}
+          if (!category && window.adminCategory) category = String(window.adminCategory).trim();
+          if (!category){ try{ const params = new URLSearchParams(window.location.search); category = params.get('category') || ''; }catch(e){} }
+          function prefixFromCategory(cat){ if (!cat) return ''; cat = String(cat).toLowerCase(); if (cat.includes('numerical')) return 'NA'; if (cat.includes('verbal')) return 'VA'; if (cat.includes('clerical')) return 'CA'; if (cat.includes('entrepreneur')) return 'ET'; if (cat.includes('science')) return 'ST'; if (cat.includes('logical')) return 'LR'; if (cat.includes('mechanical')) return 'MA'; if (cat.includes('interpersonal')) return 'IST'; return ''; }
+          const p = prefixFromCategory(category);
+          if (!p){ qidEl.value = ''; }
+          else {
+            // find smallest missing numeric suffix for this prefix by querying existing questions
+            (async ()=>{
+              try{
+                const res = await fetch(`${backendBase}/questions?category=${encodeURIComponent(category || '')}`);
+                if (!res.ok){ qidEl.value = p + '001'; return; }
+                const data = await res.json();
+                if (!Array.isArray(data)){ qidEl.value = p + '001'; return; }
+                const nums = [];
+                const re = new RegExp('^' + p + '(\\d+)$','i');
+                for (const r of data){ const idv = (r.question_id || '').toString(); const m = idv.match(re); if (m){ const n = parseInt(m[1],10); if (!Number.isNaN(n)) nums.push(n); } }
+                nums.sort((a,b)=>a-b);
+                let next = 1;
+                for (let i=0;i<nums.length;i++){
+                  if (nums[i] > next) break;
+                  if (nums[i] === next) next++;
+                }
+                const formatted = String(next).padStart(3,'0');
+                qidEl.value = p + formatted;
+              }catch(e){ qidEl.value = p + '001'; }
+            })();
+          }
+        }
+      }catch(e){}
+      const fields = ['qa_question','qa_opt_a','qa_opt_b','qa_opt_c','qa_opt_d','qa_opt_e'];
+      if (mode === 'edit' && row){
+        const qidEl = document.getElementById('question_id');
+        if (qidEl) qidEl.value = row.question_id || row.questionId || row.id || '';
+        try{ document.getElementById('qa_question').value = row.question || ''; }catch(e){}
+        try{ document.getElementById('qa_long_text').value = row.long_text || row.longtext || ''; }catch(e){}
+        try{ document.getElementById('qa_opt_a').value = row.opt_a || ''; }catch(e){}
+        try{ document.getElementById('qa_opt_b').value = row.opt_b || ''; }catch(e){}
+        try{ document.getElementById('qa_opt_c').value = row.opt_c || ''; }catch(e){}
+        try{ document.getElementById('qa_opt_d').value = row.opt_d || ''; }catch(e){}
+        try{ document.getElementById('qa_opt_e').value = row.opt_e || ''; }catch(e){}
+        const correctSel = document.getElementById('qa_correct_answer'); if (correctSel) correctSel.value = row.correct_answer || row.answer || row.correct || '';
+        const map = {qa_opt_a_preview: row.opt_a, qa_opt_b_preview: row.opt_b, qa_opt_c_preview: row.opt_c, qa_opt_d_preview: row.opt_d, qa_opt_e_preview: row.opt_e, qa_image_preview: row.image_url || row.image || row.question_image};
+        for (const id in map){ const el = document.getElementById(id); if (el) el.src = looksLikeUrl(map[id]) ? map[id] : ''; }
+      }
+
+      // live preview wiring
+      for (const name of fields.slice(1)){
+        const inp = document.getElementById(name);
+        const prev = document.getElementById(name + '_preview');
+        const viewBtn = document.getElementById(name + '_view');
+        const browseLbl = document.getElementById(name + '_browse');
+        const removeBtn = document.getElementById(name + '_remove');
+        if (!inp || !prev) continue;
+        inp.addEventListener('input', ()=>{
+          const v = inp.value.trim();
+          prev.src = looksLikeUrl(v)? v : '';
+          prev.style.display = _qa_hasPreview(prev) ? 'inline-block' : 'none';
+          if (viewBtn){ viewBtn.style.display = _qa_hasPreview(prev) ? 'inline-block' : 'none'; }
+          if (removeBtn) removeBtn.style.display = _qa_hasPreview(prev) ? 'inline-block' : 'none';
+          if (browseLbl) browseLbl.style.display = _qa_hasPreview(prev) ? 'none' : 'inline-block';
+        });
+        prev.style.display = _qa_hasPreview(prev) ? 'inline-block' : 'none';
+        if (viewBtn){ viewBtn.style.display = _qa_hasPreview(prev) ? 'inline-block' : 'none'; }
+        if (removeBtn) removeBtn.style.display = _qa_hasPreview(prev) ? 'inline-block' : 'none';
+        if (browseLbl) browseLbl.style.display = _qa_hasPreview(prev) ? 'none' : 'inline-block';
+      }
+
+      // file browse for Option A: show local preview when user picks a file
+      const fileA = document.getElementById('qa_opt_a_file');
+      const prevA = document.getElementById('qa_opt_a_preview');
+      const viewA = document.getElementById('qa_opt_a_view');
+      if (fileA && prevA){
+        fileA.addEventListener('change', (evt)=>{
+          const f = fileA.files && fileA.files[0];
+          if (!f) return;
+          const reader = new FileReader();
+          reader.onload = (e) => { prevA.src = e.target.result; prevA.style.display = 'inline-block'; if (window.updateModalViewButtons) updateModalViewButtons(modalEl); };
+          reader.readAsDataURL(f);
+        });
+      }
+      if (viewA){ viewA.addEventListener('click', ()=>{ if (_qa_hasPreview(prevA)) window.open(prevA.src, '_blank'); }); viewA.style.display = _qa_hasPreview(prevA) ? 'inline-block' : 'none'; }
+      const remA = document.getElementById('qa_opt_a_remove'); if (remA){ remA.addEventListener('click', ()=>{ try{ fileA.value=''; prevA.src=''; prevA.style.display='none'; remA.style.display='none'; const browse = document.getElementById('qa_opt_a_browse'); if (browse) browse.style.display='inline-block'; if (window.updateModalViewButtons) updateModalViewButtons(modalEl); }catch(e){}}); remA.style.display = _qa_hasPreview(prevA) ? 'inline-block' : 'none'; }
+        // option B remove
+        const fileB = document.getElementById('qa_opt_b_file');
+        const prevB = document.getElementById('qa_opt_b_preview');
+        const viewB = document.getElementById('qa_opt_b_view');
+        if (fileB && prevB){ fileB.addEventListener('change', (evt)=>{ const f = fileB.files && fileB.files[0]; if (!f) return; const reader = new FileReader(); reader.onload = (e)=>{ prevB.src = e.target.result; prevB.style.display = _qa_hasPreview(prevB)?'inline-block':'none'; if (window.updateModalViewButtons) updateModalViewButtons(modalEl); }; reader.readAsDataURL(f); }); }
+        if (viewB){ viewB.addEventListener('click', ()=>{ if (_qa_hasPreview(prevB)) window.open(prevB.src,'_blank'); }); viewB.style.display = _qa_hasPreview(prevB)?'inline-block':'none'; }
+        const remB = document.getElementById('qa_opt_b_remove'); if (remB){ remB.addEventListener('click', ()=>{ try{ if (fileB) fileB.value=''; if (prevB){ prevB.src=''; prevB.style.display='none'; } remB.style.display='none'; const browse = document.getElementById('qa_opt_b_browse'); if (browse) browse.style.display='inline-block'; if (window.updateModalViewButtons) updateModalViewButtons(modalEl); }catch(e){} }); remB.style.display = _qa_hasPreview(prevB)?'inline-block':'none'; }
+
+        // option C remove
+        const fileC = document.getElementById('qa_opt_c_file');
+        const prevC = document.getElementById('qa_opt_c_preview');
+        const viewC = document.getElementById('qa_opt_c_view');
+        if (fileC && prevC){ fileC.addEventListener('change', (evt)=>{ const f = fileC.files && fileC.files[0]; if (!f) return; const reader = new FileReader(); reader.onload = (e)=>{ prevC.src = e.target.result; prevC.style.display = _qa_hasPreview(prevC)?'inline-block':'none'; if (window.updateModalViewButtons) updateModalViewButtons(modalEl); }; reader.readAsDataURL(f); }); }
+        if (viewC){ viewC.addEventListener('click', ()=>{ if (_qa_hasPreview(prevC)) window.open(prevC.src,'_blank'); }); viewC.style.display = _qa_hasPreview(prevC)?'inline-block':'none'; }
+        const remC = document.getElementById('qa_opt_c_remove'); if (remC){ remC.addEventListener('click', ()=>{ try{ if (fileC) fileC.value=''; if (prevC){ prevC.src=''; prevC.style.display='none'; } remC.style.display='none'; const browse = document.getElementById('qa_opt_c_browse'); if (browse) browse.style.display='inline-block'; if (window.updateModalViewButtons) updateModalViewButtons(modalEl); }catch(e){} }); remC.style.display = _qa_hasPreview(prevC)?'inline-block':'none'; }
+
+        // option D remove
+        const fileD = document.getElementById('qa_opt_d_file');
+        const prevD = document.getElementById('qa_opt_d_preview');
+        const viewD = document.getElementById('qa_opt_d_view');
+        if (fileD && prevD){ fileD.addEventListener('change', (evt)=>{ const f = fileD.files && fileD.files[0]; if (!f) return; const reader = new FileReader(); reader.onload = (e)=>{ prevD.src = e.target.result; prevD.style.display = _qa_hasPreview(prevD)?'inline-block':'none'; if (window.updateModalViewButtons) updateModalViewButtons(modalEl); }; reader.readAsDataURL(f); }); }
+        if (viewD){ viewD.addEventListener('click', ()=>{ if (_qa_hasPreview(prevD)) window.open(prevD.src,'_blank'); }); viewD.style.display = _qa_hasPreview(prevD)?'inline-block':'none'; }
+        const remD = document.getElementById('qa_opt_d_remove'); if (remD){ remD.addEventListener('click', ()=>{ try{ if (fileD) fileD.value=''; if (prevD){ prevD.src=''; prevD.style.display='none'; } remD.style.display='none'; const browse = document.getElementById('qa_opt_d_browse'); if (browse) browse.style.display='inline-block'; if (window.updateModalViewButtons) updateModalViewButtons(modalEl); }catch(e){} }); remD.style.display = _qa_hasPreview(prevD)?'inline-block':'none'; }
+
+        // option E remove
+        const fileE = document.getElementById('qa_opt_e_file');
+        const prevE = document.getElementById('qa_opt_e_preview');
+        const viewE = document.getElementById('qa_opt_e_view');
+        if (fileE && prevE){ fileE.addEventListener('change', (evt)=>{ const f = fileE.files && fileE.files[0]; if (!f) return; const reader = new FileReader(); reader.onload = (e)=>{ prevE.src = e.target.result; prevE.style.display = _qa_hasPreview(prevE)?'inline-block':'none'; if (window.updateModalViewButtons) updateModalViewButtons(modalEl); }; reader.readAsDataURL(f); }); }
+        if (viewE){ viewE.addEventListener('click', ()=>{ if (_qa_hasPreview(prevE)) window.open(prevE.src,'_blank'); }); viewE.style.display = _qa_hasPreview(prevE)?'inline-block':'none'; }
+        const remE = document.getElementById('qa_opt_e_remove'); if (remE){ remE.addEventListener('click', ()=>{ try{ if (fileE) fileE.value=''; if (prevE){ prevE.src=''; prevE.style.display='none'; } remE.style.display='none'; const browse = document.getElementById('qa_opt_e_browse'); if (browse) browse.style.display='inline-block'; if (window.updateModalViewButtons) updateModalViewButtons(modalEl); }catch(e){} }); remE.style.display = _qa_hasPreview(prevE)?'inline-block':'none'; }
+
+      // file browse for Question Image: ensure preview + hidden src update
+      const qfile = document.getElementById('qa_image_file');
+      const qprev = document.getElementById('qa_image_preview');
+      const qview = document.getElementById('qa_image_view');
+      const qhid = document.getElementById('qa_image_src');
+      if (qfile && qprev){
+        qfile.addEventListener('change', (evt)=>{
+          const f = qfile.files && qfile.files[0];
+          if (!f) return;
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const val = e.target.result;
+            qprev.src = val;
+            qprev.style.display = _qa_hasPreview(qprev) ? 'inline-block' : 'none';
+            if (qhid) qhid.value = val || '';
+            if (qview){ qview.style.display = _qa_hasPreview(qprev) ? 'inline-block' : 'none'; }
+            const browseLbl = document.getElementById('qa_image_browse'); if (browseLbl) browseLbl.style.display = _qa_hasPreview(qprev) ? 'none' : 'inline-block';
+            const qrem = document.getElementById('qa_image_remove'); if (qrem) qrem.style.display = _qa_hasPreview(qprev) ? 'inline-block' : 'none';
+            if (window.updateModalViewButtons) updateModalViewButtons(modalEl);
+          };
+          reader.readAsDataURL(f);
+        });
+      }
+      if (qview){ qview.addEventListener('click', ()=>{ if (_qa_hasPreview(qprev)) window.open(qprev.src, '_blank'); }); qview.style.display = _qa_hasPreview(qprev) ? 'inline-block' : 'none'; }
+      const qrem = document.getElementById('qa_image_remove'); if (qrem){ qrem.addEventListener('click', ()=>{ try{ if (qfile) qfile.value=''; if (qprev){ qprev.src=''; qprev.style.display='none'; } qrem.style.display='none'; const browse = document.getElementById('qa_image_browse'); if (browse) browse.style.display='inline-block'; const hid = document.getElementById('qa_image_src'); if (hid) hid.value=''; if (window.updateModalViewButtons) updateModalViewButtons(modalEl); }catch(e){ console.error(e); } }); qrem.style.display = _qa_hasPreview(qprev) ? 'inline-block' : 'none'; }
+
+      // cancel/save
+      const cancelBtn = modalEl.querySelector('#qaCancel'); if (cancelBtn) cancelBtn.addEventListener('click', ()=> modalEl.style.display = 'none');
+      const saveBtn = modalEl.querySelector('#qaSave'); if (saveBtn) saveBtn.addEventListener('click', async ()=>{
+        const correctSel = document.getElementById('qa_correct_answer');
+        const correctErr = document.getElementById('qa_correct_error');
+        if (correctErr) correctErr.style.display = 'none';
+        if (correctSel && !correctSel.value){
+          if (correctErr){ correctErr.textContent = 'Select a correct answer'; correctErr.style.display = 'block'; }
+          else alert('Select a correct answer');
+          return;
+        }
+        const payload = {
+          question: document.getElementById('qa_question').value,
+          question_id: (document.getElementById('question_id') && document.getElementById('question_id').value) || null,
+          long_text: document.getElementById('qa_long_text') ? document.getElementById('qa_long_text').value : null,
+          opt_a: document.getElementById('qa_opt_a').value,
+          opt_b: document.getElementById('qa_opt_b').value,
+          opt_c: document.getElementById('qa_opt_c').value,
+          opt_d: document.getElementById('qa_opt_d').value,
+          opt_e: document.getElementById('qa_opt_e').value || null,
+          image_url: (document.getElementById('qa_image_src') && document.getElementById('qa_image_src').value) || null,
+          answer: (document.getElementById('qa_correct_answer') && document.getElementById('qa_correct_answer').value) || null
+        };
+        try{
+          if (mode === 'add'){
+            const r = await fetch(`${backendBase}/questions?category=${encodeURIComponent('')}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            if (!r.ok){ alert('Create failed: '+r.status); return; }
+            location.reload();
+          } else {
+            const r = await fetch(`${backendBase}/questions/${encodeURIComponent(row.id)}?category=${encodeURIComponent('')}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            if (!r.ok){ alert('Update failed: '+r.status); return; }
+            location.reload();
+          }
+        }catch(e){ console.error(e); alert('Save error'); }
+      });
+      const correctSelOn = modalEl.querySelector('#qa_correct_answer');
+      if (correctSelOn){ const correctErrOn = modalEl.querySelector('#qa_correct_error'); correctSelOn.addEventListener('change', ()=>{ if (correctErrOn) correctErrOn.style.display = 'none'; }); }
+    }
+  </script>
+  <script>
+    // Global delegated handler: ensure any Cancel button closes its closest .qa-modal
+    (function(){
+      document.addEventListener('click', function(e){
+        try{
+          const t = e.target;
+          if (!t) return;
+          if (t.id === 'qaCancel' || (t.matches && t.matches('#qaCancel'))){
+            const container = t.closest && t.closest('.qa-modal') ? t.closest('.qa-modal') : document.getElementById('qaModal');
+            if (container && container.parentNode){ container.parentNode.removeChild(container); }
+            else if (container){ container.style.display = 'none'; }
+          }
+        }catch(_){ }
+      }, false);
+    })();
+  </script>
+  <!-- Embedded modal fragment copied from update-question-modal.html for inline use -->
+  <style>
+    /* Ensure modal centers in viewport even if page styles conflict */
+    #qaModal.qa-modal{position:fixed;inset:0;background:rgba(3,7,18,0.45);display:flex;align-items:center;justify-content:center;z-index:12000}
+    #qaModal.qa-modal .panel{background:#fff;border-radius:10px;padding:18px;max-width:820px;width:96%;max-height:80vh;overflow:auto;box-shadow:0 12px 40px rgba(6,8,20,0.12)}
+    /* Force the panel to be fixed and centered regardless of parent transforms */
+    #qaModal.qa-modal .panel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%)}
+    /* thumbnail sizing inside modal (ensure visible) */
+    #qaModal .opt-preview{width:650px;height:150px;object-fit:contain;border-radius:6px;border:1px solid #e6e6e9}
+    /* Make text inputs fill their flex containers and allow shrinking in narrow layouts */
+    #qaModal .row input, #qaModal .row textarea{width:100%;min-width:0;box-sizing:border-box}
+  </style>
+  <div class="qa-modal" id="qaModal" style="display:none">
+    <div class="panel">
+      <h3 id="qaModalTitle">Add Question</h3>
+      <div class="row"><input id="question_id" placeholder="question_id" disabled /></div>
+      <div class="row"><input id="qa_question" placeholder="Question text" /></div>
+       <div class="row" style="margin-bottom:8px">
+          <textarea id="qa_long_text" placeholder="Long text (solution, explanation, or extra info)" rows="4" style="width:100%;padding:8px;border:1px solid #e6e6e9;border-radius:6px"></textarea>
+        </div>
+      <!-- Question image upload (browse + preview + view) -->
+      <div class="row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <img id="qa_image_preview" class="opt-preview" src="" alt="Question image preview" />
+        <label id="qa_image_browse" style="display:inline-block;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#a0a0a0;cursor:pointer;font-size:13px;color:#0b1724">
+            Browse
+            <input id="qa_image_file" type="file" accept="image/*" style="display:none" />
+          </label>
+          <button id="qa_image_remove" style="display:none;margin-left:6px;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer">Remove</button>
+          <button id="qa_image_view" disabled style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">View</button>
+      </div>
+      <input type="hidden" id="qa_image_src" />
+      <div class="row" style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1"><input id="qa_opt_a" placeholder="Option A" /></div>
+      </div>
+      <div class="row" style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1"><input id="qa_opt_b" placeholder="Option B" /></div>
+      </div>
+      <div class="row" style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1"><input id="qa_opt_c" placeholder="Option C" /></div>
+      </div>
+      <div class="row" style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1"><input id="qa_opt_d" placeholder="Option D" /></div>
+      </div>
+      <div class="row" style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1"><input id="qa_opt_e" placeholder="Option E" /></div>
+      </div>
+
+      <div class="row" style="display:flex;align-items:center;gap:8px">
+        <img id="qa_opt_a_preview" class="opt-preview" src="" alt="A preview" />
+        <label id="qa_opt_a_browse" style="display:inline-block;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#a0a0a0;cursor:pointer;font-size:13px;color:#0b1724">
+          Browse
+          <input id="qa_opt_a_file" type="file" accept="image/*" style="display:none" />
+        </label>
+        <button id="qa_opt_a_remove" style="display:none;margin-left:6px;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer">Remove</button>
+        <button id="qa_opt_a_view" disabled style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">View</button>
+      </div>
+      <div class="row" style="display:flex;align-items:center;gap:8px">
+      <img id="qa_opt_b_preview" class="opt-preview" src="" alt="B preview" />
+          <label id="qa_opt_b_browse" style="display:inline-block;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#a0a0a0;cursor:pointer;font-size:13px;color:#0b1724">
+            Browse
+            <input id="qa_opt_b_file" type="file" accept="image/*" style="display:none" />
+          </label>
+          <button id="qa_opt_b_remove" style="display:none;margin-left:6px;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer">Remove</button>
+          <button id="qa_opt_b_view" disabled style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">View</button>
+      </div>
+      <div class="row" style="display:flex;align-items:center;gap:8px">
+      <img id="qa_opt_c_preview" class="opt-preview" src="" alt="C preview" />
+          <label id="qa_opt_c_browse" style="display:inline-block;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#a0a0a0;cursor:pointer;font-size:13px;color:#0b1724">
+            Browse
+            <input id="qa_opt_c_file" type="file" accept="image/*" style="display:none" />
+          </label>
+          <button id="qa_opt_c_remove" style="display:none;margin-left:6px;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer">Remove</button>
+          <button id="qa_opt_c_view" disabled style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">View</button>
+      </div>
+      <div class="row" style="display:flex;align-items:center;gap:8px">
+      <img id="qa_opt_d_preview" class="opt-preview" src="" alt="D preview" />
+          <label id="qa_opt_d_browse" style="display:inline-block;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#a0a0a0;cursor:pointer;font-size:13px;color:#0b1724">
+            Browse
+            <input id="qa_opt_d_file" type="file" accept="image/*" style="display:none" />
+          </label>
+          <button id="qa_opt_d_remove" style="display:none;margin-left:6px;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer">Remove</button>
+          <button id="qa_opt_d_view" disabled style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">View</button>
+      </div>
+      <div class="row" style="display:flex;align-items:center;gap:8px">
+      <img id="qa_opt_e_preview" class="opt-preview" src="" alt="E preview" />
+          <label id="qa_opt_e_browse" style="display:inline-block;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#a0a0a0;cursor:pointer;font-size:13px;color:#0b1724">
+            Browse
+            <input id="qa_opt_e_file" type="file" accept="image/*" style="display:none" />
+          </label>
+          <button id="qa_opt_e_remove" style="display:none;margin-left:6px;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer">Remove</button>
+          <button id="qa_opt_e_view" disabled style="display:none;padding:6px 10px;border-radius:6px;border:1px solid #575757;background:#fff;cursor:pointer;margin-left:6px">View</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label style="display:block;margin-bottom:6px;font-weight:600;color:#0b1724">Correct Answer</label>
+        <select id="qa_correct_answer" style="width:120px;padding:6px;border:1px solid #e6e6e9;border-radius:6px">
+          <option value="">(none)</option>
+          <option value="A">A</option>
+          <option value="B">B</option>
+          <option value="C">C</option>
+          <option value="D">D</option>
+          <option value="E">E</option>
+        </select>
+      </div>
+      <div class="actions"><button id="qaCancel">Cancel</button><button id="qaSave" class="btn-primary">Save</button></div>
+    </div>
+  </div>
+</body>
+</html>

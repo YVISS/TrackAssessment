@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Response, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import joblib
@@ -390,7 +390,6 @@ MSA_CODE_TO_FIELD = {
     "MA": "mechanical_ability",
 }
 
-# Explicit prefix overrides for known categories to ensure consistent question_id prefixes
 CATEGORY_PREFIX_OVERRIDES = {
     'verbal ability': 'VA',
     'numerical ability': 'NA',
@@ -400,6 +399,15 @@ CATEGORY_PREFIX_OVERRIDES = {
     'entrepreneurship test': 'ET',
     'logical reasoning': 'LR',
     'mechanical ability': 'MA',
+}
+
+UPLOAD_ASSET_NAME_MAP = {
+    "question": "Question",
+    "opt_a": "OPT-A",
+    "opt_b": "OPT-B",
+    "opt_c": "OPT-C",
+    "opt_d": "OPT-D",
+    "opt_e": "OPT-E",
 }
 
 
@@ -596,8 +604,7 @@ def get_questions(category: str):
         prefix = prefix_from_category(category)
         table = quote('Table_Questions')
         # The table columns use opt_a..opt_e instead of A..D
-        select_fields = 'id,question_id,question,long_text,opt_a,opt_b,opt_c,opt_d,opt_e,answer,created_at,created_by,uuid'
-        # If no prefix provided, return all rows (beware large result sets)
+        select_fields = 'id,question_id,question,long_text,image_url,opt_a,opt_b,opt_c,opt_d,opt_e,answer,created_at,created_by,uuid'        # If no prefix provided, return all rows (beware large result sets)
         if prefix:
             url = f"{supabase_url}/rest/v1/{table}?select={select_fields}&question_id=like.{prefix}%25&order=question_id.asc"
         else:
@@ -787,14 +794,14 @@ def create_question(category: str, payload: dict):
 
 @app.patch("/questions/{row_id}")
 def update_question(row_id: str, category: str, payload: dict):
-    """Update a question row by id in the Supabase table for `category`.
-    """
+    """Update a question row by id in the Supabase table for `category`."""
     try:
         supabase_url = os.getenv("SUPABASE_URL") or SUPABASE_URL
         key = os.getenv("SUPABASE_SERVICE_KEY") or SUPABASE_SERVICE_KEY
         anon = os.getenv("SUPABASE_ANON_KEY")
         if not supabase_url or not (key or anon):
             return {"error": "Supabase URL or keys not configured on server"}
+
         headers = {
             "apikey": key or anon,
             "Authorization": f"Bearer {key or anon}",
@@ -803,12 +810,11 @@ def update_question(row_id: str, category: str, payload: dict):
             "Prefer": "return=representation",
         }
 
-        # Map incoming payload fields to Table_Questions column names (opt_a..opt_e, long_text)
         mapped = {}
         for k in ('question_id', 'question', 'long_text', 'created_by', 'image_url'):
             if k in payload:
                 mapped[k] = payload[k]
-        # options mapping
+
         if 'opt_a' in payload or 'A' in payload:
             mapped['opt_a'] = payload.get('opt_a') or payload.get('A')
         if 'opt_b' in payload or 'B' in payload:
@@ -817,13 +823,14 @@ def update_question(row_id: str, category: str, payload: dict):
             mapped['opt_c'] = payload.get('opt_c') or payload.get('C')
         if 'opt_d' in payload or 'D' in payload:
             mapped['opt_d'] = payload.get('opt_d') or payload.get('D')
+
         mapped['opt_e'] = payload.get('opt_e') or payload.get('E') or None
+
         if 'answer' in payload:
             mapped['answer'] = payload['answer']
 
-        # Use Table_Questions and allow row_id to be either numeric id or question_id
         table = quote('Table_Questions')
-        # Determine whether row_id is an integer id, a uuid, or a question_id
+
         is_int = False
         is_uuid = False
         try:
@@ -831,6 +838,7 @@ def update_question(row_id: str, category: str, payload: dict):
             is_int = True
         except Exception:
             is_int = False
+
         try:
             uuid.UUID(row_id)
             is_uuid = True
@@ -842,140 +850,32 @@ def update_question(row_id: str, category: str, payload: dict):
         elif is_uuid:
             url = f"{supabase_url}/rest/v1/{table}?uuid=eq.{quote(row_id)}"
         else:
-            # treat row_id as question_id
             url = f"{supabase_url}/rest/v1/{table}?question_id=eq.{quote(row_id)}"
 
-        # log outgoing update for debugging
         try:
             print(f"update_question: PATCH -> {url} payload={mapped}")
         except Exception:
             pass
+
         resp = requests.patch(url, json=mapped, headers=headers, timeout=10)
+
         try:
-            print(f"update_question: supabase status={resp.status_code} body={getattr(resp, 'text', '<no body>')}" )
+            print(f"update_question: supabase status={resp.status_code} body={getattr(resp, 'text', '<no body>')}")
         except Exception:
             pass
+
         if resp.status_code in (200, 204):
-            # return representation if present
             try:
                 return Response(content=resp.text, status_code=200, media_type="application/json")
             except Exception:
                 return {"updated": True}
-        # surface Supabase error
+
         raise HTTPException(status_code=resp.status_code, detail=resp.text)
+
     except HTTPException:
         raise
     except Exception as e:
         return {"error": str(e)}
-
-
-@app.delete("/questions/{row_id}")
-def delete_question(row_id: str, category: str):
-    """Delete a question row by id from the Supabase table for `category`.
-    """
-    try:
-        supabase_url = os.getenv("SUPABASE_URL") or SUPABASE_URL
-        key = os.getenv("SUPABASE_SERVICE_KEY") or SUPABASE_SERVICE_KEY
-        anon = os.getenv("SUPABASE_ANON_KEY")
-        if not supabase_url or not (key or anon):
-            return {"error": "Supabase URL or keys not configured"}
-        headers = {
-            "apikey": key or anon,
-            "Authorization": f"Bearer {key or anon}",
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "Prefer": "return=representation",
-        }
-        # Target the canonical single table `Table_Questions` and allow
-        # deletion by numeric id, uuid, or question_id.
-        table = quote('Table_Questions')
-        # Determine type of row_id
-        is_int = False
-        is_uuid = False
-        try:
-            int(row_id)
-            is_int = True
-        except Exception:
-            is_int = False
-        try:
-            import uuid as _uuid
-            _uuid.UUID(row_id)
-            is_uuid = True
-        except Exception:
-            is_uuid = False
-
-        if is_int:
-            url = f"{supabase_url}/rest/v1/{table}?id=eq.{quote(row_id)}"
-        elif is_uuid:
-            url = f"{supabase_url}/rest/v1/{table}?uuid=eq.{quote(row_id)}"
-        else:
-            url = f"{supabase_url}/rest/v1/{table}?question_id=eq.{quote(row_id)}"
-
-            # Attempt to fetch the existing row to determine any storage folder to delete
-            try:
-                fetch_resp = requests.get(url, headers=headers, timeout=8)
-                row_data = None
-                if fetch_resp.status_code == 200:
-                    try:
-                        fetched = fetch_resp.json()
-                        if isinstance(fetched, list) and fetched:
-                            row_data = fetched[0]
-                        elif isinstance(fetched, dict):
-                            row_data = fetched
-                    except Exception:
-                        row_data = None
-
-                # Collect exact storage objects referenced in row fields and delete them.
-                delete_errors = []
-                if row_data:
-                    bucket_marker = f"/storage/v1/object/"
-                    for k in ('opt_a','opt_b','opt_c','opt_d','opt_e','image_url'):
-                        v = row_data.get(k)
-                        if isinstance(v, str) and bucket_marker in v:
-                            try:
-                                # parse bucket and object path from public URL portion
-                                m = re.search(r'/storage/v1/object/(?:public/)?([^/]+)/(.*)$', v)
-                                if not m:
-                                    continue
-                                bname = m.group(1)
-                                objpath = (m.group(2) or '').split('?',1)[0].split('#',1)[0]
-                                if not bname or not objpath:
-                                    continue
-                                del_url = f"{supabase_url.rstrip('/')}/storage/v1/object/{quote(bname)}/{quote(objpath, safe='/')}"
-                                try:
-                                    dresp = requests.delete(del_url, headers={
-                                        'apikey': os.getenv('SUPABASE_SERVICE_KEY') or SUPABASE_SERVICE_KEY,
-                                        'Authorization': f"Bearer {os.getenv('SUPABASE_SERVICE_KEY') or SUPABASE_SERVICE_KEY}",
-                                    }, timeout=20)
-                                    if dresp.status_code not in (200, 204):
-                                        delete_errors.append((f"{bname}/{objpath}", dresp.status_code, getattr(dresp, 'text', None)))
-                                except Exception as e:
-                                    delete_errors.append((f"{bname}/{objpath}", 'exception', str(e)))
-                            except Exception:
-                                continue
-
-                # Proceed to delete the DB row regardless of storage deletion outcome.
-                try:
-                    resp = requests.delete(url, headers=headers, timeout=10)
-                    if resp.status_code in (200, 204):
-                        result = {"deleted": True}
-                        if delete_errors:
-                            result['storage_delete_warnings'] = delete_errors
-                        return result
-                    # forward Supabase error
-                    raise HTTPException(status_code=resp.status_code, detail=resp.text)
-                except HTTPException:
-                    raise
-                except Exception as e:
-                    return {"error": str(e)}
-            except HTTPException:
-                raise
-            except Exception as e:
-                return {"error": str(e)}
-    except Exception as e:
-        return {"error": str(e)}
-
-
 @app.get("/user-profile")
 def get_user_profile(email: str):
     """Lookup a users_profile row by email and return it.
@@ -1032,6 +932,8 @@ def get_user_profile(email: str):
         return {"error": str(e)}
 
 
+
+
 def _decode_data_url(data_url: str):
     """Decode a data URL (data:[<mediatype>][;base64],<data>) into (bytes, content_type)"""
     m = re.match(r'^data:(?P<ctype>[^;]+)(;base64)?,(?P<data>.*)$', data_url, re.DOTALL)
@@ -1048,173 +950,285 @@ def _decode_data_url(data_url: str):
 
 @app.post('/upload_dataurl')
 def upload_dataurl(payload: dict):
-    """Upload a single data URL to Supabase storage and return a public URL.
-
-    Expects `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` to be configured in the server env.
-    """
+    """Upload a single data URL to Supabase storage and return a public URL."""
     try:
         if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
             raise HTTPException(status_code=500, detail='Supabase storage not configured on server')
+
         bucket = payload.get('bucket')
         path = payload.get('path')
         data_url = payload.get('data_url')
-        # optional hints from client
-        category = payload.get('category') or payload.get('cat') or None
-        question_id = payload.get('question_id') or payload.get('qid') or None
+
         if not bucket or not path or not data_url:
             raise HTTPException(status_code=400, detail='bucket, path and data_url required')
-        try:
-            raw, ctype = _decode_data_url(data_url)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f'Invalid data URL: {e}')
 
-        # Server-side folder mapping (safe and opt-in): map friendly categories to folder names
-        # and canonical filenames. This ensures uploads for mapped categories use
-        # predictable paths like NA-Test-01/NA-Question and NA-Test-01/NA-OPT-A.
-        USE_SERVER_PATH_MAPPING = os.getenv('USE_SERVER_PATH_MAPPING', '1') in ('1','true','True')
-        category_folder_map = {
-            'Numerical Ability': 'NA-Test-01',
-            'Numerical_Ability': 'NA-Test-01',
-            'numerical_ability': 'NA-Test-01',
-            'Numerical%20Ability': 'NA-Test-01',
-            'Mechanical Ability': 'MA-Test-12',
-            'Verbal Ability': 'VA-Test-01',
-        }
+        raw, ctype = _decode_data_url(data_url)
 
-        # Decide whether to override the provided path
-        mapped_path = None
-        try:
-            if USE_SERVER_PATH_MAPPING:
-                # determine folder key: prefer explicit category, else infer from provided path
-                folder_key = None
-                if category:
-                    folder_key = category
-                else:
-                    # try to extract leading folder from client-supplied path
-                    try:
-                        folder_key = str(path).split('/',1)[0]
-                    except Exception:
-                        folder_key = None
-
-                def norm(s):
-                    return str(s or '').lower().replace('%20',' ').replace('_',' ').strip()
-
-                mapped_folder = None
-                if folder_key:
-                    # match normalized keys
-                    for k,v in category_folder_map.items():
-                        if norm(k) == norm(folder_key):
-                            mapped_folder = v; break
-                # if not found, try matching by question_id prefix
-                if not mapped_folder and question_id:
-                    m = str(question_id).strip().upper()
-                    for v in category_folder_map.values():
-                        if str(v).upper().startswith(m.split('-')[0]):
-                            mapped_folder = v; break
-
-                if mapped_folder:
-                    # determine extension from original path or content-type
-                    ext = ''
-                    try:
-                        if '.' in (path or ''):
-                            ext = '.' + (path.rsplit('.',1)[1])
-                        else:
-                            # determine from content-type
-                            ctype = None
-                            try:
-                                raw_tmp, ctype = _decode_data_url(data_url)
-                            except Exception:
-                                ctype = None
-                            if ctype and '/' in ctype:
-                                if ctype.endswith('jpeg') or ctype.endswith('jpg'):
-                                    ext = '.jpg'
-                                elif ctype.endswith('png'):
-                                    ext = '.png'
-                                elif ctype.endswith('webp'):
-                                    ext = '.webp'
-                                elif ctype.endswith('gif'):
-                                    ext = '.gif'
-                                else:
-                                    ext = ''
-                    except Exception:
-                        ext = ''
-
-                    # infer field type (opt_a .. opt_e or question) from the supplied path
-                    lowered = (path or '').lower()
-                    field_letter = None
-                    for letter in ('a','b','c','d','e'):
-                        if f'opt_{letter}' in lowered or f'_opt{letter}' in lowered or f'opt-{letter}' in lowered:
-                            field_letter = letter.upper(); break
-                    is_question = ('question' in lowered) or (field_letter is None and ('opt_' not in lowered and 'opt-' not in lowered))
-
-                    # Use per-question filenames when question_id is provided to avoid collisions
-                    if question_id:
-                        safe_qid = str(question_id).strip()
-                        if is_question:
-                            filename = f"{safe_qid}_Question{ext}"
-                        else:
-                            filename = f"{safe_qid}_OPT_{field_letter}{ext}"
-                    else:
-                        # fallback to prefix-based filenames for backward compatibility
-                        prefix = str(mapped_folder).split('-')[0].upper()
-                        if is_question:
-                            filename = f"{prefix}-Question{ext}"
-                        else:
-                            filename = f"{prefix}-OPT-{field_letter}{ext}"
-
-                    mapped_path = f"{mapped_folder}/{filename}"
-        except Exception as e:
-            # fallback gracefully to client-provided path
-            print('upload_dataurl: server mapping failed', e)
-
-        # choose final path to upload
-        final_path = mapped_path or path
-
-        # Supabase storage upload: PUT to /storage/v1/object/{bucket}/{final_path} with raw bytes
-        upload_url = f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/{bucket}/{final_path}"
+        upload_url = f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/{bucket}/{quote(path, safe='/')}"
         params = {'upsert': 'true', 'cacheControl': '3600'}
         headers = {
             'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
             'apikey': SUPABASE_SERVICE_KEY,
             'Content-Type': ctype,
         }
+
         resp = requests.put(upload_url, params=params, headers=headers, data=raw, timeout=20)
         if resp.status_code not in (200, 201):
             raise HTTPException(status_code=502, detail=f'Upload failed: {resp.status_code} {resp.text}')
-        # Build public object URL
-        public = f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{bucket}/{quote(final_path, safe='/')}"
-        return { 'public_url': public }
+
+        public_url = f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{bucket}/{quote(path, safe='/')}"
+        return {'public_url': public_url}
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/upload-question-image")
+async def upload_question_image(
+    file: UploadFile = File(...),
+    category: str = Form(...),
+    asset_type: str = Form(...),
+    question_id: str = Form(...),
+):
+    try:
+        if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+            raise HTTPException(status_code=500, detail="Supabase storage not configured on server")
+
+        category = (category or "").strip()
+        asset_type = (asset_type or "").strip().lower()
+        question_id = (question_id or "").strip().upper()
+
+        prefix = prefix_from_category(category)
+        if not prefix:
+            raise HTTPException(status_code=400, detail="Invalid category")
+
+        if asset_type not in UPLOAD_ASSET_NAME_MAP:
+            raise HTTPException(status_code=400, detail="Invalid asset_type")
+
+        if not question_id:
+            raise HTTPException(status_code=400, detail="Missing question_id")
+
+        if not question_id.startswith(prefix):
+            raise HTTPException(status_code=400, detail="question_id does not match category")
+
+        bucket = "msa-images"
+        folder_name = question_id
+
+        suffix = UPLOAD_ASSET_NAME_MAP[asset_type]
+        filename = f"{prefix}-{suffix}.webp"
+        storage_path = f"{folder_name}/{filename}"
+
+        content = await file.read()
+        if not content:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+        upload_url = f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/{bucket}/{quote(storage_path, safe='/')}"
+        upload_headers = {
+            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Content-Type": "image/webp",
+        }
+        params = {
+            "upsert": "true",
+            "cacheControl": "3600",
+        }
+
+        resp = requests.put(
+            upload_url,
+            params=params,
+            headers=upload_headers,
+            data=content,
+            timeout=30,
+        )
+
+        if resp.status_code not in (200, 201):
+            raise HTTPException(
+                status_code=502,
+                detail=f"Upload failed: {resp.status_code} {resp.text}"
+            )
+
+        public_url = f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/public/{bucket}/{quote(storage_path, safe='/')}"
+
+        return {
+            "success": True,
+            "bucket": bucket,
+            "folder": folder_name,
+            "path": storage_path,
+            "filename": filename,
+            "public_url": public_url,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.delete('/questions/{row_id}')
 def delete_question(row_id: str, category: str = ''):
-    """Delete a question row by numeric id from Table_Questions via Supabase REST.
-    Call as: DELETE /questions/{row_id}?category=<optional>
-    """
     try:
         supabase_url = os.getenv('SUPABASE_URL') or SUPABASE_URL
         key = os.getenv('SUPABASE_SERVICE_KEY') or SUPABASE_SERVICE_KEY
         anon = os.getenv('SUPABASE_ANON_KEY')
+
         if not supabase_url or not (key or anon):
             return {"error": "Supabase URL or keys not configured"}
+
+        auth_key = key or anon
+
         headers = {
-            "apikey": key or anon,
-            "Authorization": f"Bearer {key or anon}",
+            "apikey": auth_key,
+            "Authorization": f"Bearer {auth_key}",
             "Accept": "application/json",
+            "Content-Type": "application/json",
         }
+
         table = quote('Table_Questions')
-        # Try to delete by numeric id column `id`
-        url = f"{supabase_url}/rest/v1/{table}?id=eq.{quote(str(row_id))}"
-        resp = requests.delete(url, headers=headers, timeout=10)
-        if resp.status_code in (200,204):
-            return {"deleted": True}
-        return {"error": "Supabase delete failed", "status": resp.status_code, "text": resp.text}
+
+        is_int = False
+        is_uuid = False
+
+        try:
+            int(row_id)
+            is_int = True
+        except Exception:
+            is_int = False
+
+        try:
+            uuid.UUID(row_id)
+            is_uuid = True
+        except Exception:
+            is_uuid = False
+
+        if is_int:
+            lookup_url = f"{supabase_url}/rest/v1/{table}?id=eq.{quote(str(row_id))}&select=id,question_id,image_url,opt_a,opt_b,opt_c,opt_d,opt_e,uuid"
+        elif is_uuid:
+            lookup_url = f"{supabase_url}/rest/v1/{table}?uuid=eq.{quote(str(row_id))}&select=id,question_id,image_url,opt_a,opt_b,opt_c,opt_d,opt_e,uuid"
+        else:
+            lookup_url = f"{supabase_url}/rest/v1/{table}?question_id=eq.{quote(str(row_id))}&select=id,question_id,image_url,opt_a,opt_b,opt_c,opt_d,opt_e,uuid"
+
+        lookup_resp = requests.get(lookup_url, headers=headers, timeout=10)
+
+        if lookup_resp.status_code != 200:
+            return {
+                "error": "Lookup failed before delete",
+                "status": lookup_resp.status_code,
+                "text": lookup_resp.text
+            }
+
+        rows = lookup_resp.json()
+        if not rows:
+            return {
+                "error": "No matching row found",
+                "deleted": False,
+                "row_id": row_id
+            }
+
+        row = rows[0]
+        actual_id = row.get("id")
+        question_id = (row.get("question_id") or "").strip().upper()
+
+        if not actual_id:
+            return {
+                "error": "Matched row is missing numeric id",
+                "deleted": False,
+                "row": row
+            }
+
+        storage_deleted = []
+        storage_errors = []
+
+        if key and question_id:
+            bucket = "msa-images"
+            prefix = prefix_from_category(category) or re.sub(r'\d+$', '', question_id).upper()
+
+            candidate_paths = [
+                f"{question_id}/{prefix}-Question.webp",
+                f"{question_id}/{prefix}-OPT-A.webp",
+                f"{question_id}/{prefix}-OPT-B.webp",
+                f"{question_id}/{prefix}-OPT-C.webp",
+                f"{question_id}/{prefix}-OPT-D.webp",
+                f"{question_id}/{prefix}-OPT-E.webp",
+                f"{question_id}/{prefix}-Question.jpg",
+                f"{question_id}/{prefix}-OPT-A.jpg",
+                f"{question_id}/{prefix}-OPT-B.jpg",
+                f"{question_id}/{prefix}-OPT-C.jpg",
+                f"{question_id}/{prefix}-OPT-D.jpg",
+                f"{question_id}/{prefix}-OPT-E.jpg",
+                f"{question_id}/{prefix}-Question.png",
+                f"{question_id}/{prefix}-OPT-A.png",
+                f"{question_id}/{prefix}-OPT-B.png",
+                f"{question_id}/{prefix}-OPT-C.png",
+                f"{question_id}/{prefix}-OPT-D.png",
+                f"{question_id}/{prefix}-OPT-E.png",
+            ]
+
+            storage_headers = {
+                "Authorization": f"Bearer {key}",
+                "apikey": key,
+            }
+
+            for path in candidate_paths:
+                try:
+                    delete_url = f"{supabase_url.rstrip('/')}/storage/v1/object/{bucket}/{quote(path, safe='/')}"
+                    dresp = requests.delete(delete_url, headers=storage_headers, timeout=10)
+
+                    if dresp.status_code in (200, 204):
+                        storage_deleted.append(path)
+                    else:
+                        storage_errors.append({
+                            "path": path,
+                            "status": dresp.status_code,
+                            "text": dresp.text
+                        })
+                except Exception as e:
+                    storage_errors.append({
+                        "path": path,
+                        "error": str(e)
+                    })
+
+        delete_url = f"{supabase_url}/rest/v1/{table}?id=eq.{quote(str(actual_id))}"
+        delete_headers = {
+            "apikey": auth_key,
+            "Authorization": f"Bearer {auth_key}",
+            "Accept": "application/json",
+            "Prefer": "return=representation",
+        }
+
+        delete_resp = requests.delete(delete_url, headers=delete_headers, timeout=10)
+
+        if delete_resp.status_code not in (200, 204):
+            return {
+                "error": "Supabase delete failed",
+                "status": delete_resp.status_code,
+                "text": delete_resp.text,
+                "actual_id": actual_id,
+                "question_id": question_id
+            }
+
+        deleted_rows = []
+        try:
+            deleted_rows = delete_resp.json() if delete_resp.text else []
+        except Exception:
+            deleted_rows = []
+
+        if delete_resp.status_code == 200 and isinstance(deleted_rows, list) and len(deleted_rows) == 0:
+            return {
+                "error": "Delete returned 200 but no rows were actually deleted",
+                "deleted": False,
+                "actual_id": actual_id,
+                "question_id": question_id
+            }
+
+        return {
+            "deleted": True,
+            "actual_id": actual_id,
+            "question_id": question_id,
+            "storage_deleted": storage_deleted,
+            "storage_errors": storage_errors
+        }
+
     except Exception as e:
         return {"error": str(e)}
 @app.post('/delete_object')
