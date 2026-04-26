@@ -400,7 +400,7 @@ GROUP_CAREERS = {
         "Nurse Aide",
         "Occupational Therapist",
         "Parole Officer",
-        "Second-School Teacher",
+        "Secondary-School Teacher",
     ],
     "CIL": [
         "Dietitian",

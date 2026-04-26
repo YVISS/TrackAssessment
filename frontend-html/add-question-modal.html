@@ -43,11 +43,6 @@
 <input type="hidden" id="qa_image_src" />
 
 <div class="row"><input id="qa_opt_a" placeholder="Option A" /></div>
-<div class="row"><input id="qa_opt_b" placeholder="Option B" /></div>
-<div class="row"><input id="qa_opt_c" placeholder="Option C" /></div>
-<div class="row"><input id="qa_opt_d" placeholder="Option D" /></div>
-<div class="row"><input id="qa_opt_e" placeholder="Option E" /></div>
-
 <div class="field">
   <div class="row" style="display:flex;align-items:center;gap:8px">
     <img id="qa_opt_a_preview" class="opt-preview" src="" alt="A preview" />
@@ -60,6 +55,7 @@
   </div>
 </div>
 
+<div class="row"><input id="qa_opt_b" placeholder="Option B" /></div>
 <div class="field">
   <div class="row" style="display:flex;align-items:center;gap:8px">
     <img id="qa_opt_b_preview" class="opt-preview" src="" alt="B preview" />
@@ -72,6 +68,7 @@
   </div>
 </div>
 
+<div class="row"><input id="qa_opt_c" placeholder="Option C" /></div>
 <div class="field">
   <div class="row" style="display:flex;align-items:center;gap:8px">
     <img id="qa_opt_c_preview" class="opt-preview" src="" alt="C preview" />
@@ -84,6 +81,7 @@
   </div>
 </div>
 
+<div class="row"><input id="qa_opt_d" placeholder="Option D" /></div>
 <div class="field">
   <div class="row" style="display:flex;align-items:center;gap:8px">
     <img id="qa_opt_d_preview" class="opt-preview" src="" alt="D preview" />
@@ -96,6 +94,7 @@
   </div>
 </div>
 
+<div class="row"><input id="qa_opt_e" placeholder="Option E" /></div>
 <div class="field">
   <div class="row" style="display:flex;align-items:center;gap:8px">
     <img id="qa_opt_e_preview" class="opt-preview" src="" alt="E preview" />
@@ -180,8 +179,369 @@
       }
     };
 
+    function _qa_apiBase(){
+      return `${location.protocol}//${location.hostname}:8000`;
+    }
+
+    function _qa_storeEl(modalEl, base){
+      if (base === 'qa_image') return modalEl.querySelector('#qa_image_src') || document.getElementById('qa_image_src');
+      return modalEl.querySelector('#' + base) || document.getElementById(base);
+    }
+
+    function _qa_previewEl(modalEl, base){
+      return modalEl.querySelector('#' + base + '_preview') || document.getElementById(base + '_preview');
+    }
+
+    function _qa_fileEl(modalEl, base){
+      return modalEl.querySelector('#' + base + '_file') || document.getElementById(base + '_file');
+    }
+
+    function _qa_questionId(modalEl){
+      const el = modalEl.querySelector('#question_id') || document.getElementById('question_id');
+      return (el && el.value ? String(el.value).trim().toUpperCase() : '');
+    }
+
+    function _qa_prefixFromQid(qid){
+      return String(qid || '').replace(/\d+$/,'').toUpperCase();
+    }
+
+    function _qa_fieldMeta(base, qid){
+      const prefix = _qa_prefixFromQid(qid) || 'QA';
+      const map = {
+        qa_image: { fieldKey: 'image_url', fileName: `${prefix}-Question.webp` },
+        qa_opt_a: { fieldKey: 'opt_a', fileName: `${prefix}-OPT-A.webp` },
+        qa_opt_b: { fieldKey: 'opt_b', fileName: `${prefix}-OPT-B.webp` },
+        qa_opt_c: { fieldKey: 'opt_c', fileName: `${prefix}-OPT-C.webp` },
+        qa_opt_d: { fieldKey: 'opt_d', fileName: `${prefix}-OPT-D.webp` },
+        qa_opt_e: { fieldKey: 'opt_e', fileName: `${prefix}-OPT-E.webp` },
+      };
+      const meta = map[base] || { fieldKey: '', fileName: `${prefix}-Asset.webp` };
+      return {
+        ...meta,
+        tempPath: qid ? `Temp/${qid} ${meta.fileName}` : `Temp/${meta.fileName}`
+      };
+    }
+
+    function _qa_existingCanonicalUrl(modalEl, base, row){
+      const store = _qa_storeEl(modalEl, base);
+      const original = ((store && store.dataset && store.dataset.originalUrl) || '').trim();
+      if (_qa_looksLikeUrl(original)) return original;
+
+      if (base === 'qa_image'){
+        const hidVal = ((store && store.value) || '').trim();
+        if (_qa_looksLikeUrl(hidVal)) return hidVal;
+        const rowVal = row && (row.image_url || row.image || row.question_image || '');
+        return _qa_looksLikeUrl(rowVal) ? String(rowVal).trim() : '';
+      }
+
+      const current = ((store && store.dataset && store.dataset.imageValue) || '').trim();
+      if (_qa_looksLikeUrl(current)) return current;
+
+      const meta = _qa_fieldMeta(base, _qa_questionId(modalEl));
+      const rowVal = row && row[meta.fieldKey];
+      return _qa_looksLikeUrl(rowVal || '') ? String(rowVal).trim() : '';
+    }
+
+    async function _qa_postJson(path, payload){
+      const res = await fetch(`${_qa_apiBase()}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload || {})
+      });
+      let data = null;
+      try{ data = await res.json(); }catch(_){}
+      if (!res.ok){
+        throw new Error((data && (data.detail || data.error)) || `Request failed: ${res.status}`);
+      }
+      return data || {};
+    }
+
+    function _qa_assetTypeFromFileId(fId){
+      const map = {
+        'qa_image_file': 'question',
+        'qa_opt_a_file': 'opt_a',
+        'qa_opt_b_file': 'opt_b',
+        'qa_opt_c_file': 'opt_c',
+        'qa_opt_d_file': 'opt_d',
+        'qa_opt_e_file': 'opt_e',
+      };
+      return map[fId] || '';
+    }
+
+    function _qa_assetTypeFromBase(base){
+      const map = {
+        'qa_image': 'question',
+        'qa_opt_a': 'opt_a',
+        'qa_opt_b': 'opt_b',
+        'qa_opt_c': 'opt_c',
+        'qa_opt_d': 'opt_d',
+        'qa_opt_e': 'opt_e',
+      };
+      return map[base] || '';
+    }
+
+    function _qa_prefixFromQuestionId(questionId){
+      const q = String(questionId || '').trim().toUpperCase();
+      const m = q.match(/^([A-Z]+)/);
+      return m ? m[1] : '';
+    }
+
+    function _qa_filenameBase(questionId, assetType){
+      const prefix = _qa_prefixFromQuestionId(questionId);
+      if (!prefix) return '';
+      const suffixMap = {
+        'question': 'Question',
+        'opt_a': 'OPT-A',
+        'opt_b': 'OPT-B',
+        'opt_c': 'OPT-C',
+        'opt_d': 'OPT-D',
+        'opt_e': 'OPT-E',
+      };
+      const suffix = suffixMap[String(assetType || '').toLowerCase()];
+      return suffix ? `${prefix}-${suffix}` : '';
+    }
+
+    function _qa_tempPath(questionId, assetType){
+      const base = _qa_filenameBase(questionId, assetType);
+      if (!base) return '';
+      return `Temp/${String(questionId || '').trim().toUpperCase()} ${base}.webp`;
+    }
+
+    function _qa_finalPath(questionId, assetType){
+      const base = _qa_filenameBase(questionId, assetType);
+      if (!base) return '';
+      return `${String(questionId || '').trim().toUpperCase()}/${base}.webp`;
+    }
+
+    function _qa_publicUrlForPath(path){
+      const clean = String(path || '').trim();
+      if (!clean) return '';
+      return `${_qa_apiBase().replace(/:\d+$/, '').replace(/\/$/, '')}`; // placeholder
+    }
+
+    function _qa_bucketPublicUrl(path){
+      const clean = String(path || '').trim();
+      if (!clean) return '';
+      const origin = window.SUPABASE_URL || (window.supabaseConfig && window.supabaseConfig.supabaseUrl) || '';
+      if (!origin) return '';
+      return `${String(origin).replace(/\/$/, '')}/storage/v1/object/public/msa-images/${encodeURI(clean).replace(/%2F/g,'/')}`;
+    }
+
+    function _qa_stateEl(modalEl, assetType){
+      const map = {
+        'question': modalEl.querySelector('#qa_image_src') || document.getElementById('qa_image_src'),
+        'opt_a': modalEl.querySelector('#qa_opt_a') || document.getElementById('qa_opt_a'),
+        'opt_b': modalEl.querySelector('#qa_opt_b') || document.getElementById('qa_opt_b'),
+        'opt_c': modalEl.querySelector('#qa_opt_c') || document.getElementById('qa_opt_c'),
+        'opt_d': modalEl.querySelector('#qa_opt_d') || document.getElementById('qa_opt_d'),
+        'opt_e': modalEl.querySelector('#qa_opt_e') || document.getElementById('qa_opt_e'),
+      };
+      return map[String(assetType || '').toLowerCase()] || null;
+    }
+
+    async function _qa_stageTempUpload(modalEl, file, category, assetType, questionId){
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("category", category || '');
+      formData.append("asset_type", assetType || '');
+      formData.append("question_id", questionId || '');
+      formData.append("staging", "1");
+
+      const res = await fetch(`${location.protocol}//${location.hostname}:8000/upload-question-image`, {
+        method: "POST",
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok){
+        throw new Error(data.detail || data.error || 'Temp upload failed');
+      }
+      const stateEl = _qa_stateEl(modalEl, assetType);
+      if (stateEl && stateEl.dataset){
+        stateEl.dataset.tempPath = data.path || _qa_tempPath(questionId, assetType);
+        stateEl.dataset.tempPublicUrl = data.public_url || '';
+        stateEl.dataset.finalPath = _qa_finalPath(questionId, assetType);
+        stateEl.dataset.finalPublicUrl = _qa_bucketPublicUrl(_qa_finalPath(questionId, assetType));
+        stateEl.dataset.assetType = assetType;
+      }
+      return data;
+    }
+
+    async function _qa_deleteTempForAsset(modalEl, assetType){
+      const stateEl = _qa_stateEl(modalEl, assetType);
+      const tempPath = stateEl && stateEl.dataset ? (stateEl.dataset.tempPath || '') : '';
+      if (!tempPath) return;
+      try{
+        await _qa_postJson('/delete_object', { bucket: 'msa-images', path: tempPath });
+      }catch(_){}
+      if (stateEl && stateEl.dataset){
+        delete stateEl.dataset.tempPath;
+        delete stateEl.dataset.tempPublicUrl;
+        delete stateEl.dataset.finalPath;
+        delete stateEl.dataset.finalPublicUrl;
+        delete stateEl.dataset.assetType;
+        delete stateEl.dataset.imageValue;
+      }
+    }
+
+    async function _qa_cleanupAllTemp(modalEl){
+      const assets = ['question','opt_a','opt_b','opt_c','opt_d','opt_e'];
+      for (const assetType of assets){
+        await _qa_deleteTempForAsset(modalEl, assetType);
+      }
+    }
+    window.cleanupQuestionModalTemp = _qa_cleanupAllTemp;
+
+    async function _qa_promoteTempIfAny(modalEl, assetType){
+      const stateEl = _qa_stateEl(modalEl, assetType);
+      const tempPath = stateEl && stateEl.dataset ? (stateEl.dataset.tempPath || '') : '';
+      const finalPath = stateEl && stateEl.dataset ? (stateEl.dataset.finalPath || '') : '';
+      if (!tempPath || !finalPath){
+        return stateEl && stateEl.dataset ? (stateEl.dataset.finalPublicUrl || stateEl.dataset.tempPublicUrl || '') : '';
+      }
+      const data = await _qa_postJson('/promote_object', {
+        bucket: 'msa-images',
+        from_path: tempPath,
+        to_path: finalPath,
+        delete_source: true
+      });
+      const finalPublicUrl = (data && (data.public_url || data.new_public_url)) || _qa_bucketPublicUrl(finalPath);
+      if (stateEl && stateEl.dataset){
+        // Keep tempPath for fallback cleanup if the backend promoted the file
+        // but failed to delete the temp source object.
+        stateEl.dataset.finalPublicUrl = finalPublicUrl || '';
+        stateEl.dataset.tempPublicUrl = '';
+        stateEl.dataset.promoteDeletePending = '1';
+      }
+      return finalPublicUrl || '';
+    }
+
+    async function _qa_moveCurrentToTemp(modalEl, base, row){
+      const store = _qa_storeEl(modalEl, base);
+      if (!store) return null;
+
+      const qid = _qa_questionId(modalEl);
+      if (!qid) return null;
+
+      const meta = _qa_fieldMeta(base, qid);
+      if (store.dataset && store.dataset.tempPath) return store.dataset.tempPath;
+
+      const existingUrl = _qa_existingCanonicalUrl(modalEl, base, row);
+      if (!_qa_looksLikeUrl(existingUrl)) return null;
+
+      await _qa_postJson('/promote_object', {
+        public_url: existingUrl,
+        to_path: meta.tempPath,
+        delete_source: true
+      });
+
+      if (store.dataset){
+        store.dataset.originalUrl = existingUrl;
+        store.dataset.tempPath = meta.tempPath;
+      }
+      return meta.tempPath;
+    }
+
+    async function _qa_restoreTemp(modalEl, base){
+      const store = _qa_storeEl(modalEl, base);
+      if (!store || !store.dataset) return;
+
+      const tempPath = (store.dataset.tempPath || '').trim();
+      const originalUrl = (store.dataset.originalUrl || '').trim();
+      if (!tempPath || !originalUrl) return;
+
+      await _qa_postJson('/promote_object', {
+        bucket: 'msa-images',
+        from_path: tempPath,
+        target_public_url: originalUrl,
+        delete_source: true
+      });
+
+      store.dataset.tempPath = '';
+      store.dataset.removed = '0';
+    }
+
+    async function _qa_deleteTemp(modalEl, base){
+      const store = _qa_storeEl(modalEl, base);
+      if (!store || !store.dataset) return;
+
+      const tempPath = (store.dataset.tempPath || '').trim();
+      if (!tempPath) return;
+
+      await _qa_postJson('/delete_object', {
+        bucket: 'msa-images',
+        path: tempPath
+      });
+
+      store.dataset.tempPath = '';
+      store.dataset.originalUrl = '';
+      store.dataset.removed = '0';
+    }
+
+    function _qa_publicUrlToBucketPath(url){
+      const raw = String(url || '').trim();
+      if (!raw) return '';
+      try{
+        const marker = '/storage/v1/object/public/msa-images/';
+        const idx = raw.indexOf(marker);
+        if (idx >= 0){
+          return decodeURIComponent(raw.slice(idx + marker.length).split('?')[0]);
+        }
+      }catch(_){}
+      return '';
+    }
+
+    async function _qa_deleteOriginalIfNeeded(modalEl, base, nextUrl){
+      const store = _qa_storeEl(modalEl, base);
+      if (!store || !store.dataset) return;
+
+      const originalUrl = String(store.dataset.originalUrl || '').trim();
+      const next = String(nextUrl || '').trim();
+      const removed = String(store.dataset.removed || '0') === '1';
+
+      if (!originalUrl) return;
+      if (!removed && (!next || next === originalUrl)) return;
+      if (next && next === originalUrl) return;
+
+      const originalPath = _qa_publicUrlToBucketPath(originalUrl);
+      if (!originalPath) return;
+
+      try{
+        await _qa_postJson('/delete_object', {
+          bucket: 'msa-images',
+          path: originalPath
+        });
+      }catch(err){
+        console.warn('delete original failed', { base, originalPath, err });
+      }
+    }
+
+    function _qa_markFieldRemoved(modalEl, base, removed){
+      const store = _qa_storeEl(modalEl, base);
+      if (!store || !store.dataset) return;
+      store.dataset.removed = removed ? '1' : '0';
+      if (base === 'qa_image'){
+        if (removed) store.value = '';
+      } else if (removed) {
+        store.dataset.imageValue = '';
+      }
+    }
+
+    function _qa_resetTempState(modalEl){
+      const bases = ['qa_image','qa_opt_a','qa_opt_b','qa_opt_c','qa_opt_d','qa_opt_e'];
+      for (const base of bases){
+        const store = _qa_storeEl(modalEl, base);
+        if (store && store.dataset){
+          store.dataset.removed = '0';
+          store.dataset.tempPath = '';
+          store.dataset.originalUrl = '';
+          if (base !== 'qa_image') store.dataset.imageValue = '';
+        }
+      }
+    }
+
     // Main initializer moved from questions-all.html
     window.initializeQuestionModalFragment = function(modalEl, mode, row){
+      modalEl.dataset.qaMode = mode;
       const title = modalEl.querySelector('#qaModalTitle'); if (title) title.textContent = mode === 'add' ? 'Add Question' : 'Edit Question';
       // if opening in Add mode, clear any previous values/previews so stale data doesn't persist
       if (mode === 'add'){
@@ -193,6 +553,7 @@
           const fileIds = ['qa_image_file','qa_opt_a_file','qa_opt_b_file','qa_opt_c_file','qa_opt_d_file','qa_opt_e_file'];
           for (const id of fileIds){ const f = modalEl.querySelector('#'+id) || document.getElementById(id); if (f){ try{ f.value = ''; }catch(e){} } }
           const hid = modalEl.querySelector('#qa_image_src') || document.getElementById('qa_image_src'); if (hid) hid.value = '';
+          _qa_resetTempState(modalEl);
           if (window.updateModalViewButtons) updateModalViewButtons(modalEl);
         }catch(e){}
       }
@@ -233,10 +594,19 @@
             } else {
               (async ()=>{
                 try{
+                  if (typeof window.fetchNextQuestionId === 'function'){
+                    const nextId = await window.fetchNextQuestionId(p, 3, category);
+                    qidEl.value = nextId || (p + '001');
+                    return;
+                  }
+
+                  const cached = (window.questionsCache && Array.isArray(window.questionsCache[category || '']))
+                    ? window.questionsCache[category || '']
+                    : [];
                   const nums = [];
                   const re = new RegExp('^' + p + '(\\d+)$','i');
-                  for (const r of data){
-                    const idv = (r.question_id || '').toString();
+                  for (const r of cached){
+                    const idv = (r && r.question_id ? r.question_id : '').toString();
                     const m = idv.match(re);
                     if (m){
                       const n = parseInt(m[1],10);
@@ -266,13 +636,57 @@
 
         try{ modalEl.querySelector('#qa_question').value = row.question || ''; }catch(e){}
         try{ modalEl.querySelector('#qa_long_text').value = row.long_text || row.longtext || ''; }catch(e){}
+        try{
+          const correctSelect = modalEl.querySelector('#qa_correct_answer') || document.getElementById('qa_correct_answer');
+          const currentAnswer = String(
+            row.correct_answer ?? row.answer ?? row.correct ?? row.correctAnswer ?? ''
+          ).trim().toUpperCase();
+          if (correctSelect) {
+            correctSelect.value = ['A','B','C','D','E'].includes(currentAnswer) ? currentAnswer : '';
+          }
+        }catch(e){}
 
-        // keep textboxes empty
+        // keep textboxes empty when current value is an image URL
         try{ modalEl.querySelector('#qa_opt_a').value = _qa_looksLikeUrl(row.opt_a || '') ? '' : (row.opt_a || ''); }catch(e){}
         try{ modalEl.querySelector('#qa_opt_b').value = _qa_looksLikeUrl(row.opt_b || '') ? '' : (row.opt_b || ''); }catch(e){}
         try{ modalEl.querySelector('#qa_opt_c').value = _qa_looksLikeUrl(row.opt_c || '') ? '' : (row.opt_c || ''); }catch(e){}
         try{ modalEl.querySelector('#qa_opt_d').value = _qa_looksLikeUrl(row.opt_d || '') ? '' : (row.opt_d || ''); }catch(e){}
         try{ modalEl.querySelector('#qa_opt_e').value = _qa_looksLikeUrl(row.opt_e || '') ? '' : (row.opt_e || ''); }catch(e){}
+
+        _qa_resetTempState(modalEl);
+
+        const questionSrc = _qa_looksLikeUrl(row.image_url || row.image || row.question_image || '') ? String(row.image_url || row.image || row.question_image).trim() : '';
+        const questionPreview = modalEl.querySelector('#qa_image_preview');
+        const questionStore = _qa_storeEl(modalEl, 'qa_image');
+        if (questionPreview){
+          questionPreview.src = questionSrc || QA_PREVIEW_PLACEHOLDER;
+          questionPreview.style.display = 'block';
+        }
+        if (questionStore){
+          questionStore.value = questionSrc || '';
+          if (questionStore.dataset) {
+            questionStore.dataset.originalUrl = questionSrc || '';
+            questionStore.dataset.removed = '0';
+          }
+        }
+
+        const optionBases = ['qa_opt_a','qa_opt_b','qa_opt_c','qa_opt_d','qa_opt_e'];
+        for (const base of optionBases){
+          const meta = _qa_fieldMeta(base, _qa_questionId(modalEl));
+          const current = row && row[meta.fieldKey];
+          const src = _qa_looksLikeUrl(current || '') ? String(current).trim() : '';
+          const preview = _qa_previewEl(modalEl, base);
+          const store = _qa_storeEl(modalEl, base);
+          if (preview){
+            preview.src = src || QA_PREVIEW_PLACEHOLDER;
+            preview.style.display = 'block';
+          }
+          if (store && store.dataset){
+            store.dataset.imageValue = src || '';
+            store.dataset.originalUrl = src || '';
+            store.dataset.removed = '0';
+          }
+        }
       }
 
       // file browse handlers
@@ -285,37 +699,79 @@
         if (fileEl.dataset.boundChange === '1') continue;
         fileEl.dataset.boundChange = '1';
 
-        fileEl.addEventListener('change', () => {
+        fileEl.addEventListener('change', async () => {
           const selectedFile = fileEl.files && fileEl.files[0];
           if (!selectedFile) return;
 
           const previewId = fId.replace('_file', '_preview');
           const previewEl = modalEl.querySelector('#' + previewId) || document.getElementById(previewId);
-
           const objectUrl = URL.createObjectURL(selectedFile);
-
           if (previewEl) {
             previewEl.src = objectUrl;
             previewEl.style.display = 'block';
           }
-          const textMap = {
-            qa_opt_a_file: 'qa_opt_a',
-            qa_opt_b_file: 'qa_opt_b',
-            qa_opt_c_file: 'qa_opt_c',
-            qa_opt_d_file: 'qa_opt_d',
-            qa_opt_e_file: 'qa_opt_e',
-          };
 
-          const textId = textMap[fId];
-          if (textId) {
-            const textInput = modalEl.querySelector('#' + textId) || document.getElementById(textId);
-            if (textInput) {
-              textInput.dataset.imageValue = objectUrl || '';
+          const assetType = _qa_assetTypeFromFileId(fId);
+          const stateEl = _qa_stateEl(modalEl, assetType);
+
+          try{
+            let category = '';
+            try{
+              const h2 = document.querySelector('.main-card h2');
+              if (h2 && h2.textContent) category = h2.textContent.trim();
+            }catch(e){}
+            if (!category && window.adminCategory) category = String(window.adminCategory).trim();
+            if (!category){
+              try{
+                const params = new URLSearchParams(window.location.search);
+                category = params.get('category') || '';
+              }catch(e){}
             }
-          }
-          if (fId === 'qa_image_file') {
-            const hid = modalEl.querySelector('#qa_image_src') || document.getElementById('qa_image_src');
-            if (hid) hid.value = '';
+            const questionId = _qa_questionId(modalEl);
+            if (!questionId) throw new Error('question_id is empty');
+
+            await _qa_deleteTempForAsset(modalEl, assetType);
+            const staged = await _qa_stageTempUpload(modalEl, selectedFile, category, assetType, questionId);
+
+            if (previewEl && staged && staged.public_url){
+              const freshUrl = `${staged.public_url}${staged.public_url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+              previewEl.src = freshUrl;
+              previewEl.style.display = 'block';
+            }
+
+            if (stateEl && stateEl.dataset){
+              stateEl.dataset.imageValue = (staged && staged.public_url) || '';
+              stateEl.dataset.removed = '0';
+            }
+
+            if (assetType === 'question'){
+              const hid = modalEl.querySelector('#qa_image_src') || document.getElementById('qa_image_src');
+              if (hid){
+                hid.value = (staged && staged.public_url) || '';
+                if (hid.dataset) hid.dataset.removed = '0';
+              }
+            }
+
+            const textMap = {
+              qa_opt_a_file: 'qa_opt_a',
+              qa_opt_b_file: 'qa_opt_b',
+              qa_opt_c_file: 'qa_opt_c',
+              qa_opt_d_file: 'qa_opt_d',
+              qa_opt_e_file: 'qa_opt_e',
+            };
+            const textId = textMap[fId];
+            if (textId) {
+              const textInput = modalEl.querySelector('#' + textId) || document.getElementById(textId);
+              if (textInput && textInput.dataset) {
+                textInput.dataset.imageValue = (staged && staged.public_url) || '';
+                textInput.dataset.removed = '0';
+              }
+            }
+
+            try{ fileEl.value = ''; }catch(_){}
+          }catch(err){
+            console.error('Temp upload failed', err);
+            alert('Image upload failed: ' + (err.message || 'Unknown error'));
           }
 
           if (window.updateModalViewButtons) updateModalViewButtons(modalEl);
@@ -339,20 +795,40 @@
         }
       }catch(e){ /* noop */ }
 
-      // wire Remove buttons to clear previews and file inputs
+      // wire Remove buttons
       const removeIds = ['qa_image','qa_opt_a','qa_opt_b','qa_opt_c','qa_opt_d','qa_opt_e'];
       for (const base of removeIds){
         const rem = modalEl.querySelector('#'+base + '_remove') || document.getElementById(base + '_remove');
         if (!rem) continue;
-        rem.addEventListener('click', ()=>{
+        if (rem.dataset.boundRemove === '1') continue;
+        rem.dataset.boundRemove = '1';
+        rem.addEventListener('click', async (e)=>{
           try{
-            const fileEl = modalEl.querySelector('#'+base + '_file') || document.getElementById(base + '_file');
+            e.preventDefault();
+            e.stopPropagation();
+
+            await _qa_deleteTempForAsset(modalEl, _qa_assetTypeFromBase(base));
+
+            const fileEl = _qa_fileEl(modalEl, base);
             if (fileEl){ try{ fileEl.value = ''; }catch(e){} }
-            const previewEl = modalEl.querySelector('#'+base + '_preview') || document.getElementById(base + '_preview');
-            if (previewEl){ try{ if (base === 'qa_image'){ previewEl.src = QA_PREVIEW_PLACEHOLDER; previewEl.style.display = 'block'; } else { previewEl.src = QA_PREVIEW_PLACEHOLDER; previewEl.style.display = 'block'; } }catch(e){} }
-            if (base === 'qa_image'){
-              const hid = modalEl.querySelector('#qa_image_src') || document.getElementById('qa_image_src'); if (hid) hid.value = '';
+
+            const previewEl = _qa_previewEl(modalEl, base);
+            if (previewEl){
+              try{
+                previewEl.src = QA_PREVIEW_PLACEHOLDER;
+                previewEl.style.display = 'block';
+              }catch(e){}
             }
+
+            const store = _qa_storeEl(modalEl, base);
+            if (base === 'qa_image'){
+              if (store) store.value = '';
+            } else if (store && store.dataset){
+              store.dataset.imageValue = '';
+            }
+
+            _qa_markFieldRemoved(modalEl, base, true);
+
             if (window.updateModalViewButtons) updateModalViewButtons(modalEl);
           }catch(e){ console.error('remove handler failed', e); }
         });
@@ -360,22 +836,39 @@
 
       // attach view handlers
       const views = ['qa_opt_a_view','qa_opt_b_view','qa_opt_c_view','qa_opt_d_view','qa_opt_e_view','qa_image_view'];
-      for (const v of views){ const btn = modalEl.querySelector('#'+v) || document.getElementById(v); if (!btn) continue; btn.addEventListener('click', ()=>{ const pid = v.replace('_view','_preview'); const prev = modalEl.querySelector('#'+pid) || document.getElementById(pid); if (prev && prev.src) window.open(prev.src,'_blank'); }); }
+      for (const v of views){
+        const btn = modalEl.querySelector('#'+v) || document.getElementById(v);
+        if (!btn) continue;
+        if (btn.dataset.boundView === '1') continue;
+        btn.dataset.boundView = '1';
+        btn.addEventListener('click', ()=>{
+          const pid = v.replace('_view','_preview');
+          const prev = modalEl.querySelector('#'+pid) || document.getElementById(pid);
+          if (prev && prev.src) window.open(prev.src,'_blank');
+        });
+      }
 
       // cancel/save wiring
       const cancelBtn = modalEl.querySelector('#qaCancel') || document.getElementById('qaCancel');
-      if (cancelBtn) cancelBtn.addEventListener('click', ()=>{
+      if (cancelBtn && cancelBtn.dataset.boundCancel !== '1') {
+        cancelBtn.dataset.boundCancel = '1';
+        cancelBtn.addEventListener('click', async (e)=>{
         try{
-          // Reset modal state for next open: reinitialize as 'add'
-          try{ if (window.initializeQuestionModalFragment) initializeQuestionModalFragment(modalEl, 'add'); }catch(_){ }
-          // then remove/hide the modal
-          const container = cancelBtn.closest && cancelBtn.closest('.qa-modal') ? cancelBtn.closest('.qa-modal') : modalEl;
+          e.preventDefault();
+          e.stopPropagation();
+
+          await _qa_cleanupAllTemp(modalEl);
+
+          const container = cancelBtn.closest && cancelBtn.closest('.qa-modal-host')
+            ? cancelBtn.closest('.qa-modal-host')
+            : (cancelBtn.closest && cancelBtn.closest('.qa-modal') ? cancelBtn.closest('.qa-modal') : modalEl);
           if (container && container.parentNode) container.parentNode.removeChild(container);
           else if (container) container.style.display = 'none';
         }catch(e){ try{ modalEl.style.display = 'none'; }catch(_){} }
-      });
+        });
+      }
       
-      async function uploadImageFile(file, category, assetType) {
+      async function uploadImageFile(file, category, assetType, staging = false) {
         const formData = new FormData();
         formData.append("file", file);
         formData.append("category", category);
@@ -384,6 +877,7 @@
         const questionIdEl = modalEl.querySelector('#question_id') || document.getElementById('question_id');
         const questionId = questionIdEl ? questionIdEl.value.trim() : '';
         formData.append("question_id", questionId);
+        if (staging) formData.append("staging", "1");
 
         const res = await fetch(`${location.protocol}//${location.hostname}:8000/upload-question-image`, {
           method: "POST",
@@ -400,7 +894,9 @@
       }
 
     const saveBtn = modalEl.querySelector('#qaSave') || document.getElementById('qaSave');
-      if (saveBtn) saveBtn.addEventListener('click', async ()=>{
+      if (saveBtn && saveBtn.dataset.boundSave !== '1') {
+        saveBtn.dataset.boundSave = '1';
+        saveBtn.addEventListener('click', async ()=>{
         try{ console.debug('qaSave clicked', {mode: mode, row: row}); }catch(_){ }
 
         try{ saveBtn.disabled = true; }catch(e){}
@@ -454,24 +950,24 @@
           return _qa_hasPreview(img);
         };
 
-        // Question validation: text OR image only, not both
+        // Validation rule: each field can use text only OR image only, never both.
+        // Option E is optional when empty.
         const hasQuestionText = !!(getVal('#qa_question') || getVal('#qa_long_text'));
         const hasQuestionImage = hasPreview('#qa_image_preview');
 
         if (hasQuestionText && hasQuestionImage) {
-          setMsg('You can only use either a text question or an image question, not both.');
+          setMsg('Only either Text or Image has to be inputted for the question.');
           saveBtn.disabled = false;
           saveBtn.textContent = _origSaveText;
           return;
         }
 
-        // Option A-E validation: text OR image only, not both
         const optionRules = [
           { label: 'A', text: '#qa_opt_a', preview: '#qa_opt_a_preview' },
           { label: 'B', text: '#qa_opt_b', preview: '#qa_opt_b_preview' },
           { label: 'C', text: '#qa_opt_c', preview: '#qa_opt_c_preview' },
           { label: 'D', text: '#qa_opt_d', preview: '#qa_opt_d_preview' },
-          { label: 'E', text: '#qa_opt_e', preview: '#qa_opt_e_preview' },
+          { label: 'E', text: '#qa_opt_e', preview: '#qa_opt_e_preview', optional: true },
         ];
 
         for (const opt of optionRules) {
@@ -479,7 +975,7 @@
           const hasImage = hasPreview(opt.preview);
 
           if (hasText && hasImage) {
-            setMsg(`Option ${opt.label} can only use either text or image, not both.`);
+            setMsg(`Only either Text or Image has to be inputted for Option ${opt.label}.`);
             saveBtn.disabled = false;
             saveBtn.textContent = _origSaveText;
             return;
@@ -520,54 +1016,123 @@
           const optionDText = ((modalEl.querySelector('#qa_opt_d') || document.getElementById('qa_opt_d'))?.value || '').trim();
           const optionEText = ((modalEl.querySelector('#qa_opt_e') || document.getElementById('qa_opt_e'))?.value || '').trim();
 
-          let imageUrl =
-            ((modalEl.querySelector('#qa_image_src') || document.getElementById('qa_image_src'))?.value) ||
-            row?.image_url ||
-            row?.image ||
-            row?.question_image ||
-            null;
+          const qStore = _qa_storeEl(modalEl, 'qa_image');
+          const aStore = _qa_storeEl(modalEl, 'qa_opt_a');
+          const bStore = _qa_storeEl(modalEl, 'qa_opt_b');
+          const cStore = _qa_storeEl(modalEl, 'qa_opt_c');
+          const dStore = _qa_storeEl(modalEl, 'qa_opt_d');
+          const eStore = _qa_storeEl(modalEl, 'qa_opt_e');
 
-          let optA = row?.opt_a || '';
-          let optB = row?.opt_b || '';
-          let optC = row?.opt_c || '';
-          let optD = row?.opt_d || '';
-          let optE = row?.opt_e || null;
+          let imageUrl = (qStore && qStore.dataset && qStore.dataset.removed === '1')
+            ? null
+            : (((qStore && qStore.value) || '').trim() ||
+               row?.image_url ||
+               row?.image ||
+               row?.question_image ||
+               null);
 
-          // VALIDATION: question = text OR image only
+          let optA = (aStore && aStore.dataset && aStore.dataset.removed === '1') ? '' : (optionAText || row?.opt_a || '');
+          let optB = (bStore && bStore.dataset && bStore.dataset.removed === '1') ? '' : (optionBText || row?.opt_b || '');
+          let optC = (cStore && cStore.dataset && cStore.dataset.removed === '1') ? '' : (optionCText || row?.opt_c || '');
+          let optD = (dStore && dStore.dataset && dStore.dataset.removed === '1') ? '' : (optionDText || row?.opt_d || '');
+          let optE = (eStore && eStore.dataset && eStore.dataset.removed === '1') ? '' : (optionEText || row?.opt_e || null);
+
+          // VALIDATION: question uses text only OR image only.
+          // Long text counts as text. Question image counts only when a real image exists.
           const hasQuestionText = !!(questionText || longText);
-          const hasQuestionImage = !!(qFile || imageUrl);
+          const hasQuestionImage = !!(
+            qFile ||
+            hasPreview('#qa_image_preview') ||
+            (imageUrl && _qa_looksLikeUrl(imageUrl))
+          );
 
           if (hasQuestionText && hasQuestionImage) {
-            setMsg("You can't have both image question and question text/long text at the same time. Use only one.");
+            setMsg('Only either Text or Image has to be inputted for the question.');
             saveBtn.disabled = false;
             saveBtn.textContent = _origSaveText;
             return;
           }
 
-          // VALIDATION: options A-E = text OR image only
+          if (!hasQuestionText && !hasQuestionImage) {
+            setMsg('The question must have either Text or Image.');
+            saveBtn.disabled = false;
+            saveBtn.textContent = _origSaveText;
+            return;
+          }
+
           const optionChecks = [
-            { label: 'A', hasText: !!optionAText, hasImage: !!(aFile || optA) },
-            { label: 'B', hasText: !!optionBText, hasImage: !!(bFile || optB) },
-            { label: 'C', hasText: !!optionCText, hasImage: !!(cFile || optC) },
-            { label: 'D', hasText: !!optionDText, hasImage: !!(dFile || optD) },
-            { label: 'E', hasText: !!optionEText, hasImage: !!(eFile || optE) },
+            {
+              label: 'A',
+              optional: false,
+              hasText: !!optionAText || (!!optA && !_qa_looksLikeUrl(optA)),
+              hasImage: !!aFile || hasPreview('#qa_opt_a_preview') || (!!optA && _qa_looksLikeUrl(optA)),
+            },
+            {
+              label: 'B',
+              optional: false,
+              hasText: !!optionBText || (!!optB && !_qa_looksLikeUrl(optB)),
+              hasImage: !!bFile || hasPreview('#qa_opt_b_preview') || (!!optB && _qa_looksLikeUrl(optB)),
+            },
+            {
+              label: 'C',
+              optional: false,
+              hasText: !!optionCText || (!!optC && !_qa_looksLikeUrl(optC)),
+              hasImage: !!cFile || hasPreview('#qa_opt_c_preview') || (!!optC && _qa_looksLikeUrl(optC)),
+            },
+            {
+              label: 'D',
+              optional: false,
+              hasText: !!optionDText || (!!optD && !_qa_looksLikeUrl(optD)),
+              hasImage: !!dFile || hasPreview('#qa_opt_d_preview') || (!!optD && _qa_looksLikeUrl(optD)),
+            },
+            {
+              label: 'E',
+              optional: true,
+              hasText: !!optionEText || (!!optE && !_qa_looksLikeUrl(optE)),
+              hasImage: !!eFile || hasPreview('#qa_opt_e_preview') || (!!optE && _qa_looksLikeUrl(optE)),
+            },
           ];
 
           for (const opt of optionChecks) {
             if (opt.hasText && opt.hasImage) {
-              setMsg(`Option ${opt.label} can't have both text and image at the same time. Use only one.`);
+              setMsg(`Only either Text or Image has to be inputted for Option ${opt.label}.`);
+              saveBtn.disabled = false;
+              saveBtn.textContent = _origSaveText;
+              return;
+            }
+
+            if (!opt.optional && !opt.hasText && !opt.hasImage) {
+              setMsg(`Option ${opt.label} must have either Text or Image.`);
               saveBtn.disabled = false;
               saveBtn.textContent = _origSaveText;
               return;
             }
           }
 
-          if (qFile) imageUrl = await uploadImageFile(qFile, category, 'question');
-          if (aFile) optA = await uploadImageFile(aFile, category, 'opt_a');
-          if (bFile) optB = await uploadImageFile(bFile, category, 'opt_b');
-          if (cFile) optC = await uploadImageFile(cFile, category, 'opt_c');
-          if (dFile) optD = await uploadImageFile(dFile, category, 'opt_d');
-          if (eFile) optE = await uploadImageFile(eFile, category, 'opt_e');
+          const answerToOptionState = Object.fromEntries(
+            optionChecks.map(opt => [opt.label, { hasText: opt.hasText, hasImage: opt.hasImage }])
+          );
+          const selectedAnswer = (((modalEl.querySelector('#qa_correct_answer') || document.getElementById('qa_correct_answer'))?.value) || '').trim().toUpperCase();
+          if (selectedAnswer && answerToOptionState[selectedAnswer] && !answerToOptionState[selectedAnswer].hasText && !answerToOptionState[selectedAnswer].hasImage) {
+            setMsg(`Correct answer ${selectedAnswer} has no input yet. Add either Text or Image for Option ${selectedAnswer}.`);
+            saveBtn.disabled = false;
+            saveBtn.textContent = _origSaveText;
+            return;
+          }
+
+          const qState = _qa_stateEl(modalEl, 'question');
+          const aState = _qa_stateEl(modalEl, 'opt_a');
+          const bState = _qa_stateEl(modalEl, 'opt_b');
+          const cState = _qa_stateEl(modalEl, 'opt_c');
+          const dState = _qa_stateEl(modalEl, 'opt_d');
+          const eState = _qa_stateEl(modalEl, 'opt_e');
+
+          if (qState && qState.dataset && qState.dataset.tempPath) imageUrl = await _qa_promoteTempIfAny(modalEl, 'question');
+          if (aState && aState.dataset && aState.dataset.tempPath) optA = await _qa_promoteTempIfAny(modalEl, 'opt_a');
+          if (bState && bState.dataset && bState.dataset.tempPath) optB = await _qa_promoteTempIfAny(modalEl, 'opt_b');
+          if (cState && cState.dataset && cState.dataset.tempPath) optC = await _qa_promoteTempIfAny(modalEl, 'opt_c');
+          if (dState && dState.dataset && dState.dataset.tempPath) optD = await _qa_promoteTempIfAny(modalEl, 'opt_d');
+          if (eState && eState.dataset && eState.dataset.tempPath) optE = await _qa_promoteTempIfAny(modalEl, 'opt_e');
 
           const payload = {
             question_id: ((modalEl.querySelector('#question_id') || document.getElementById('question_id')) && (modalEl.querySelector('#question_id') || document.getElementById('question_id')).value) || null,
@@ -599,6 +1164,11 @@
               }catch(_){}
               setMsg('Error saving: ' + text, false);
               return;
+            }
+
+            const tempBases = ['qa_image','qa_opt_a','qa_opt_b','qa_opt_c','qa_opt_d','qa_opt_e'];
+            for (const base of tempBases){
+              try{ await _qa_deleteTemp(modalEl, base); }catch(_){}
             }
 
             setMsg('Added successfully', true);
@@ -635,9 +1205,34 @@
               return;
             }
 
+            await _qa_deleteOriginalIfNeeded(modalEl, 'qa_image', imageUrl || '');
+            await _qa_deleteOriginalIfNeeded(modalEl, 'qa_opt_a', optA || '');
+            await _qa_deleteOriginalIfNeeded(modalEl, 'qa_opt_b', optB || '');
+            await _qa_deleteOriginalIfNeeded(modalEl, 'qa_opt_c', optC || '');
+            await _qa_deleteOriginalIfNeeded(modalEl, 'qa_opt_d', optD || '');
+            await _qa_deleteOriginalIfNeeded(modalEl, 'qa_opt_e', optE || '');
+
+            const tempBases = ['qa_image','qa_opt_a','qa_opt_b','qa_opt_c','qa_opt_d','qa_opt_e'];
+            for (const base of tempBases){
+              try{ await _qa_deleteTemp(modalEl, base); }catch(_){}
+            }
+
             setMsg('Updated successfully', true);
             reloadScheduled = true;
-            setTimeout(()=> location.reload(), 800);
+
+            try {
+              if (typeof window.loadQuestions === 'function') {
+                await window.loadQuestions(category);
+              }
+            } catch (e) {
+              console.error('loadQuestions failed after update', e);
+            }
+
+            try {
+              const container = modalEl.closest('.qa-modal') || modalEl;
+              if (container && container.parentNode) container.parentNode.removeChild(container);
+              else modalEl.style.display = 'none';
+            } catch (e) {}
           }
 
         }catch(e){
@@ -651,32 +1246,10 @@
             }
           }catch(_){}
         }
-      });
+        });
+      }
 
       // finally ensure view buttons are correct
       if (window.updateModalViewButtons) updateModalViewButtons(modalEl);
     };
-
-    // Global delegated handler: ensure any Cancel button closes its closest .qa-modal
-    (function(){
-      document.addEventListener('click', function(e){
-        try{
-          const t = e.target;
-          if (!t) return;
-          if (t.id === 'qaCancel' || (t.matches && t.matches('#qaCancel'))){
-            // find modal container
-            const container = t.closest && t.closest('.qa-modal') ? t.closest('.qa-modal') : document.getElementById('qaModal');
-            if (container){
-              try{
-                // Reset modal state for next open
-                if (window.initializeQuestionModalFragment) initializeQuestionModalFragment(container, 'add');
-              }catch(e){ /* ignore */ }
-              // then remove container from DOM
-              if (container.parentNode){ container.parentNode.removeChild(container); }
-              else { container.style.display = 'none'; }
-            }
-          }
-        }catch(_){ }
-      }, false);
-    })();
   </script>
