@@ -1,4 +1,42 @@
-// Inject shared admin header + category nav and setup active link + header height var
+(function () {
+
+  /* ---------- LOGIN CHECK ---------- */
+  const profileRaw = sessionStorage.getItem("user_profile");
+
+  if (!profileRaw) {
+    window.location.href = "login.html";
+    return;
+  }
+
+  let profile;
+
+  try {
+    profile = JSON.parse(profileRaw);
+  } catch (e) {
+    window.location.href = "login.html";
+    return;
+  }
+
+  const type = (
+    profile.usertype ||
+    profile.user_type ||
+    profile.type ||
+    "user"
+  ).toLowerCase();
+
+  if (type !== "admin") {
+    window.location.href = "login.html";
+    return;
+  }
+
+  /* ---------- MOBILE BLOCK ---------- */
+  if (window.innerWidth <= 768) {
+    alert("Admin panel is only available on desktop.");
+    window.location.href = "login.html";
+    return;
+  }
+
+})();
 (function(){
   const headerHtml = `
   <header style="padding:18px 24px;">

@@ -990,7 +990,9 @@ async def upload_question_image(
     category: str = Form(...),
     asset_type: str = Form(...),
     question_id: str = Form(...),
+    staging: str = Form("0"),
 ):
+    
     try:
         if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
             raise HTTPException(status_code=500, detail="Supabase storage not configured on server")
@@ -998,6 +1000,7 @@ async def upload_question_image(
         category = (category or "").strip()
         asset_type = (asset_type or "").strip().lower()
         question_id = (question_id or "").strip().upper()
+        is_staging = str(staging or "").strip().lower() in ("1", "true", "yes")
 
         prefix = prefix_from_category(category)
         if not prefix:
@@ -1013,11 +1016,18 @@ async def upload_question_image(
             raise HTTPException(status_code=400, detail="question_id does not match category")
 
         bucket = "msa-images"
-        folder_name = question_id
 
-        suffix = UPLOAD_ASSET_NAME_MAP[asset_type]
-        filename = f"{prefix}-{suffix}.webp"
-        storage_path = f"{folder_name}/{filename}"
+        asset_label = UPLOAD_ASSET_NAME_MAP.get(asset_type)
+        if not asset_label:
+            raise HTTPException(status_code=400, detail="Invalid asset_type")
+
+        filename = f"{prefix}-{asset_label}.webp"
+        if is_staging:
+            folder_name = "Temp"
+            storage_path = f"Temp/{question_id} {filename}"
+        else:
+            folder_name = question_id
+            storage_path = f"{folder_name}/{filename}"
 
         content = await file.read()
         if not content:
@@ -1449,29 +1459,48 @@ def promote_object(payload: dict):
         try:
             delete_source = bool(payload.get('delete_source', True))
             if delete_source:
-                # parse source bucket/path again
                 del_bucket = bucket
-                del_path = None
-                m2 = re.search(r'/storage/v1/object/(?:public/)?([^/]+)/(.*)$', src_url)
-                if m2:
-                    del_bucket = m2.group(1)
-                    # strip query/fragments so deletion targets the actual object name
-                    del_path = (m2.group(2) or '').split('?',1)[0].split('#',1)[0]
-                # only delete if we have a valid parse and source != target
+                del_path = (from_path or '').strip()
+
+                # fallback parse only if from_path was not given
+                if not del_path:
+                    m2 = re.search(r'/storage/v1/object/(?:public/)?([^/]+)/(.*)$', src_url)
+                    if m2:
+                        del_bucket = m2.group(1)
+                        del_path = (m2.group(2) or '').split('?', 1)[0].split('#', 1)[0]
+
                 if del_bucket and del_path and not (del_bucket == bucket and del_path == to_path):
                     delete_url = f"{SUPABASE_URL.rstrip('/')}/storage/v1/object/{del_bucket}/{quote(del_path, safe='/')}"
-                    headers_del = {'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}', 'apikey': SUPABASE_SERVICE_KEY}
-                    # attempt deletion with retries (best-effort)
-                    for attempt in range(1,4):
+                    headers_del = {
+                        'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+                        'apikey': SUPABASE_SERVICE_KEY,
+                    }
+
+                    delete_success = False
+                    delete_error = None
+
+                    for attempt in range(1, 4):
                         try:
                             dresp = requests.delete(delete_url, headers=headers_del, timeout=15)
-                            debug_steps.append(f"delete_source attempt={attempt} status={getattr(dresp,'status_code',None)} path={del_path}")
-                            break
+                            debug_steps.append(
+                                f"delete_source attempt={attempt} status={getattr(dresp,'status_code',None)} path={del_path}"
+                            )
+
+                            if dresp.status_code in (200, 204):
+                                delete_success = True
+                                break
+
+                            delete_error = f"status={dresp.status_code} body={getattr(dresp, 'text', None)}"
                         except Exception as _e:
+                            delete_error = str(_e)
                             debug_steps.append(f"delete_source attempt={attempt} exception={_e}")
-                            time.sleep(0.2 * attempt)
-        except Exception:
-            pass
+
+                        time.sleep(0.2 * attempt)
+
+                    if not delete_success:
+                        debug_steps.append(f"delete_source failed after attempts: {delete_error}")
+        except Exception as e:
+            debug_steps.append(f"delete_source outer exception: {e}")
 
         result = {'public_url': canonical, 'promoted': True}
         # If caller requested debug information, include the collected steps
@@ -1717,3 +1746,11 @@ def signup_user(req: SignupRequest):
         return user
     except Exception as e:
         return {"error": str(e)}
+
+@app.get("/group-careers/{group_code}")
+def get_group_careers(group_code: str):
+    code = (group_code or "").strip().upper()
+    return {
+        "group": code,
+        "careers": GROUP_CAREERS.get(code, [])
+    }
